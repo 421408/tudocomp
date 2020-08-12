@@ -23,9 +23,11 @@ public:
         Cherry rightchild = Cherry(position + length/2,length/2,0);
         //ihope this coyps
         rightchild.vectorR = vectorR;
+        rightchild.status=status;
         //change this
         vectorR.clear();
         length=length/2;
+        status=0;
         //return
         return rightchild;
     }
@@ -34,13 +36,18 @@ public:
         vectorR.push_back(false);
         position = position +length/2;
         length=length/2;
+        reset_found();
     }
     void only_rightfound(){
         vectorL.push_back(false);
         vectorR.push_back(true);
         length=length/2;
+        reset_found();
     }
-
+    void reset_found(){
+        rightfound=false;
+        leftfound=false;
+    }
 };
 
 }

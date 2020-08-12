@@ -11,10 +11,6 @@
 
 #include <tudocomp/decompressors/LZSSDecompressor.hpp>
 
-#include <tudocomp/ds/DSManager.hpp>
-
-#include <tudocomp_stat/StatPhase.hpp>
-
 //custom
 
 #include <unordered_map>
@@ -22,12 +18,15 @@
 #include <tuple>
 #include <iostream>
 
-
 #include <tudocomp/def.hpp>
-#include <tudocomp/util/rollinghash/rabinkarphash.hpp>
+
+#include <tudocomp/compressors/lzss/FactorBuffer.hpp>
+#include <tudocomp/compressors/lzss/UnreplacedLiterals.hpp>
 
 #include <tudocomp/compressors/lz77Aprox/AproxFactor.hpp>
 #include <tudocomp/compressors/lz77Aprox/Cherry.hpp>
+#include <tudocomp/compressors/lz77Aprox/hash_interface.hpp>
+#include <tudocomp/compressors/lz77Aprox/stackoverflow_hash.hpp>
 
 namespace tdc
 {
@@ -36,57 +35,28 @@ namespace tdc
     {
 
     private:
+        struct hmap_value
+        {
+            bool right;
+            len_t index;
+            len_t first_occ;
+            bool found;
+        };
+
         //this is ugly
-        //used for hash
-        const unsigned PRIME_BASE = 257;
-        const unsigned PRIME_MOD = 1000000007;
-        const len_t WINDOW_SIZE = 8;
+        len_t WINDOW_SIZE = 16;
         const len_t MIN_FACTOR_LENGTH = 1;
 
-        //TODO is linked list better ? insert/spliting elem expensive here but fragmentation in list
         std::vector<Cherry> FactorBuffer;
         View input_view;
+        hash_interface *hash_provider;
+        rolling_hash rhash;
 
-        //triple-tuple: hashvalue, position of first elem , size of hashwindow
-        typedef std::tuple<long long, len_t, len_t> rolling_hash;
+        long long get_factor_hash(AproxFactor &fac) { return hash_provider->make_hash(fac.position, fac.length, input_view); }
 
-        //makes hash over part of the view
-        long long hashfunction(len_t start, len_t size)
-        {
-            //https://stackoverflow.com/a/712275
-            uint_fast64_t hash = 0;
-            for (size_t i = 0; i < size; i++)
-            {
+        long long get_factor_hash_left(AproxFactor &fac) { return hash_provider->make_hash(fac.position, (fac.length / 2), input_view); }
 
-                hash = hash * PRIME_BASE + input_view[start + i]; //shift and add
-                hash %= PRIME_MOD;                                //don't overflow
-            }
-            return hash;
-        }
-
-        //takes a rollinghash triple over the view and advances it by one char
-        void advance_rolling_hash(rolling_hash &hash)
-        {
-            //std::cout << "hash"<<std::endl;
-            std::get<0>(hash) = std::get<0>(hash) * PRIME_BASE + input_view[std::get<1>(hash)+ std::get<2>(hash) + 1];        //shift hash & add new byte
-            std::get<0>(hash) %= PRIME_MOD;                                                                                   //overflow
-            std::get<0>(hash) -= input_view[std::get<1>(hash)] * std::pow(PRIME_BASE, std::get<2>(hash)); //remove first byte
-            std::get<1>(hash) += 1;                                                                                           // advance position
-        }
-
-        //comfort function
-        long long get_factor_hash(AproxFactor &fac){
-        
-            return hashfunction(fac.position, fac.length);
-        }
-
-        long long get_factor_hash_left(AproxFactor &fac){
-            return hashfunction(fac.position, fac.length/2);
-        }
-
-        long long get_factor_hash_right(AproxFactor &fac){
-            return hashfunction(fac.position + fac.length/2, fac.length/2);
-        }
+        long long get_factor_hash_right(AproxFactor &fac) { return hash_provider->make_hash(fac.position + fac.length / 2, fac.length / 2, input_view); }
 
         //this function fills the FactorBuffer with the "first row" of the "tree"
         //TODO typedef FactorFlags cause they are ugly now (and unreadable)
@@ -94,47 +64,33 @@ namespace tdc
         {
             len_t position(0);
             //run until the next factor would reach beyond the file
-            int end = input_view.size() - window_size;
-            for (int i = 0; i <= end; i = i + window_size)
+
+            for (len_t i = 0; i <= input_view.size() - 1 - window_size; i = i + window_size)
             {
-                
+
                 FactorBuffer.push_back(Cherry(position, window_size, 0));
-                std::cout <<"Factor: "<< position <<std::endl;
+
                 //cant use i after scope but must know pos for eof handle
-                position = position+window_size;
+                //if you use position in loop last step will be missing and you dont know if it its exactly
+                position = position + window_size;
             }
-            
-            //if the window size reaches beyond then split window until minSize
-            len_t ws = window_size/2;
-            while (ws > MIN_FACTOR_LENGTH){
-                
-                if(position+ws<=input_view.size()){
-                    FactorBuffer.push_back(Cherry(position,ws,0));
-                    std::cout <<"Factor: "<< position <<std::endl;
-                    position=position+ws;
-                    ws=ws/2;
-                }else{
-                    ws=ws/2;
-                }
-            }
-            //marks the last factor as eof-factor if the MinFactor border lies beyond the end of the file
+
+            //marks the last factor as eof-factor if the Factor border lies beyond the end of the file
             //note that only the very last Factor in the Buffer can have flag 7 so only ever check the last factor for this case
-            if(position<input_view.size()){
-                FactorBuffer.push_back(Cherry(position,input_view.size()-position,7));
+            if (position < input_view.size())
+            {
+                FactorBuffer.push_back(Cherry(position, window_size, 7));
             }
-            std::cout << "Populate Buffer done." <<std::endl;
         }
 
-
         //scans the FactorBuffer for all cherrys to be tested
-        void make_active_cherry_list(std::vector<len_t> &vec,len_t size)
+        void make_active_cherry_list(std::vector<len_t> &vec)
         {
-            
-            for (len_t iter = 0; iter < FactorBuffer.size()-1; iter++)
+            for (len_t iter = 0; iter < FactorBuffer.size(); iter++)
             {
-                if (!FactorBuffer[iter].status && (size==FactorBuffer[iter].length)){
-
-                        vec.push_back(len_t(iter));
+                if ((FactorBuffer[iter].status == 0) || (FactorBuffer[iter].status == 7))
+                {
+                    vec.push_back(len_t(iter));
                 }
             }
         }
@@ -143,123 +99,210 @@ namespace tdc
         //todo inline
         //returns true if they are truly equal AND HASH LIES BEFORE
         //false left check | true == right check
-        bool false_positive_check_cherry_mem( bool right, len_t cherryindex,rolling_hash rhash){
-            if(FactorBuffer[cherryindex].position>std::get<1>(rhash)+std::get<2>(rhash)){
-                if(right){
-                 return 0 == memcmp(&input_view[FactorBuffer[cherryindex].position + FactorBuffer[cherryindex].length/2],&input_view[std::get<1>(rhash)],FactorBuffer[cherryindex].length/2);
-             }
-                else{
-                    return 0 == memcmp(&input_view[FactorBuffer[cherryindex].position] , &input_view[std::get<1>(rhash)], FactorBuffer[cherryindex].length/2);
-             }
+        bool false_positive_check_cherry(bool right, len_t cherryindex)
+        {
+            if (right)
+            {
+                if ((FactorBuffer[cherryindex].position + FactorBuffer[cherryindex].length / 2) > rhash.position)
+                {
+                    return input_view.substr(FactorBuffer[cherryindex].position + FactorBuffer[cherryindex].length / 2, FactorBuffer[cherryindex].length / 2) == input_view.substr(rhash.position, rhash.length);
+                }
+                return false;
             }
-            return false;
-        }
-        //if needed check 8byte at once not individualy
-        bool false_positive_check_cherry(bool right, len_t cherryindex,rolling_hash rhash){
-            if(FactorBuffer[cherryindex].position>std::get<1>(rhash)+std::get<2>(rhash)){
-                len_t pos1;
-                len_t pos2 = std::get<1>(rhash);
-                //adjust start if left or right child
-                if (right){
-                    pos1 = FactorBuffer[cherryindex].position + FactorBuffer[cherryindex].length/2;
-                }
-                else{
-                    pos1 = FactorBuffer[cherryindex].position;
-                }
-                //check ech byte if they are the same
-                for(len_t index = 0; index<=std::get<2>(rhash);index++){
-                    if(input_view[pos1+index]!=input_view[pos2+index]){
-                        return false;
-                    }
-                }
-                return true;
-                
+            if (FactorBuffer[cherryindex].position > rhash.position)
+            {
+                return input_view.substr(FactorBuffer[cherryindex].position, FactorBuffer[cherryindex].length / 2) == input_view.substr(rhash.position, rhash.length);
             }
             return false;
         }
 
         //searches with the rolling hash over the view and marks all children of the cherrys if found
-        void mark_cherrys(std::unordered_multimap<long long,std::pair<bool, len_t>> &hmap,rolling_hash &rhash){
+        void mark_cherrys(std::unordered_multimap<long long, hmap_value> &hmap)
+        {
 
             //TODO lookup return type of equal_range
-            auto maprange = hmap.equal_range(std::get<0>(rhash));
-            
-            for (len_t i = 0; i < input_view.size()-1-std::get<2>(rhash); i++)
+            auto maprange = hmap.equal_range(rhash.hashvalue);
+            //dont let the hash rollbeyond the view
+            for (len_t i = 0; i < input_view.size() - 1 - rhash.length; i++)
             {
-                //std::cout << i <<std::endl;
-                //TODO ask range vs. bucket (bucket conatains potantialy non-same-key-elems)
-                maprange = hmap.equal_range(std::get<0>(rhash));
-                for (auto rangeiter = maprange.first; rangeiter != maprange.second; i++){
-                
-                    if(false_positive_check_cherry(rangeiter->second.first,rangeiter->second.second, rhash)){
-                        //actually matching and not the same or just hashmatch
-                        std::cout<< "Acually found:" << FactorBuffer[rangeiter->second.second].position << "at: " << std::get<2>(rhash) << std::endl;
-                        if(rangeiter->second.first  ){
-                            //right
-                            FactorBuffer[rangeiter->second.second].rightfound=true;
+
+                maprange = hmap.equal_range(rhash.hashvalue);
+
+                for (auto rangeiter = maprange.first; rangeiter != maprange.second; rangeiter++)
+                {
+
+                    if (false_positive_check_cherry(rangeiter->second.right, rangeiter->second.index))
+                    {
+                        if(!rangeiter->second.found){
+                            rangeiter->second.first_occ= rhash.position;
+                            rangeiter->second.found=true;
                         }
-                        else{
+                        
+                        //actually matching and not the same or just hashmatch
+                        if (rangeiter->second.right)
+                        {
+                            //right
+                            FactorBuffer[rangeiter->second.index].rightfound = true;
+                        }
+                        else
+                        {
                             //left
-                            FactorBuffer[rangeiter->second.second].leftfound=true;
+                            FactorBuffer[rangeiter->second.index].leftfound = true;
                         }
                     }
                 }
 
-                advance_rolling_hash(rhash);
-            }   
-        }
-
-        void populate_multimap(std::unordered_multimap<long long,std::pair<bool, std::vector<len_t>>> &hmap,std::vector<len_t> &cherrylist){
-            for (len_t iter : cherrylist){
-                
-                hmap.insert({get_factor_hash_left(FactorBuffer[iter]),std::make_pair(false,int(iter))});
-                hmap.insert({get_factor_hash_right(FactorBuffer[iter]), std::make_pair(true,int(iter))});
+                hash_provider->advance_rolling_hash(rhash);
             }
         }
 
-        void apply_findings(std::vector<len_t> &cherrylist){
+        void populate_multimap(std::unordered_multimap<long long, hmap_value> &hmap, std::vector<len_t> &cherrylist)
+        {
+            for (len_t iter = 0; iter < cherrylist.size() - 1; iter++)
+            {
 
-             len_t insertoffset=0;
-            std::vector<Cherry>::iterator iter;
-
-            for(len_t index : cherrylist){
-                //TODO i think this can be transformed into branchless
-                //this is cancer
-                
-                if(FactorBuffer[index + insertoffset].rightfound&&FactorBuffer[index + insertoffset].leftfound){
-                    //cherrydone
-                    FactorBuffer[index + insertoffset].status=1;
-                    std::cout << "cherrydone" << std::endl;
+                hmap.insert({get_factor_hash_left(FactorBuffer[iter]), hmap_value{false, len_t(iter)}});
+                hmap.insert({get_factor_hash_right(FactorBuffer[iter]), hmap_value{true, len_t(iter)}});
+            }
+            //handle eof
+            if (FactorBuffer[cherrylist.back()].status == 7)
+            {
+                len_t bull = FactorBuffer[cherrylist.back()].position;
+                len_t shit = FactorBuffer[cherrylist.back()].length / 2;
+                len_t bullshit = bull+shit;
+                std::cout<< "popmap:"<<std::endl<<"size view: "<<input_view.size()<<",Cherrylegth: "<<bullshit<<std::endl;
+                std::cout<<"bull:"<<bull<<"shit:"<<shit<<std::endl;
+                if (bullshit >= input_view.size()-1)
+                {
+                    std::cout<< "shouldme"<<std::endl;
+                    //leftchild also reaches Beyond
+                    FactorBuffer[cherrylist.back()].split();
+                    FactorBuffer[cherrylist.back()].status = 7;
+                    cherrylist.pop_back();
                 }
-                else{
-                    if (!(FactorBuffer[index + insertoffset].rightfound)&& !(FactorBuffer[index + insertoffset].leftfound)){
-                        //add new factor
-                        //TODO SIZE is always the same no need for look up change
-                        //TODO check if +1 is needed
-                        iter = FactorBuffer.begin() + index + insertoffset +1;
-                        FactorBuffer.insert(iter, FactorBuffer[index + insertoffset].split());
-                        //iter is invalid here
+                else
+                {
+                    if (FactorBuffer[cherrylist.back()].position + FactorBuffer[cherrylist.back()].length / 2 < input_view.size()-1)
+                    {
+                        std::cout<< "not me"<<std::endl;
+                        //only the right child reaches into the beyond
+                        hmap.insert({get_factor_hash_left(FactorBuffer[cherrylist.back()]), hmap_value{false, cherrylist.back()}});
+                    }
+                }
+            }
+        }
+
+        void apply_findings(std::vector<len_t> &cherrylist)
+        {
+
+            len_t insertoffset = 0;
+
+            for (len_t index : cherrylist)
+            {
+
+                if (FactorBuffer[index + insertoffset].rightfound && FactorBuffer[index + insertoffset].leftfound)
+                {
+                    //cherrydone
+                    FactorBuffer[index + insertoffset].status = 1;
+                }
+                else
+                {
+                    if (!(FactorBuffer[index + insertoffset].rightfound) && !(FactorBuffer[index + insertoffset].leftfound))
+                    {
+                        //neither left nor right found -> new cherry
+
+                        FactorBuffer.insert(FactorBuffer.begin() + index + insertoffset + 1, FactorBuffer[index + insertoffset].split());
 
                         //only increse after old factor has been changed
                         insertoffset++;
-                        std::cout << "newfactor: " << FactorBuffer[index + insertoffset].position<< std::endl;
                     }
-                    else{
-                        if(FactorBuffer[index].leftfound){
+                    else
+                    {
+                        if (FactorBuffer[index + insertoffset].leftfound)
+                        {
                             //only leftfound
                             FactorBuffer[index + insertoffset].only_leftfound();
                         }
-                        else{
+                        else
+                        {
                             //only rigth found
                             FactorBuffer[index + insertoffset].only_rightfound();
                         }
                     }
-                   
-                    
+                }
+            }
+        }
+
+
+        //this is cancer
+        len_t new_left_fac_pos(len_t position, len_t new_size, len_t orig_size) {
+
+            while (new_size > orig_size) {
+                position = position - new_size;
+             new_size = new_size / 2;
+         }
+          return position;
+
+        }
+
+        len_t new_right_fac_pos(len_t position, len_t new_size, len_t orig_size){
+            //adjust pos to end of cherry
+            position=position+orig_size;
+            while (new_size>orig_size){
+                position=position+new_size;
+                new_size=new_size/2;
+            }
+            return position;
+        }
+
+        void inflate_chains(std::vector<AproxFactor> &facbuf){
+            len_t cherry_length;
+            len_t curr_factor_length;
+            for(Cherry c : FactorBuffer){
+
+                curr_factor_length = std::pow(int(c.length),c.vectorL.size());
+                for(bool b:c.vectorL){
+                    if(b){
+                        facbuf.push_back(AproxFactor(new_left_fac_pos(c.position,curr_factor_length,c.length),curr_factor_length,2));
+                    }
+                    curr_factor_length=curr_factor_length/2;
                 }
 
-            } 
+                facbuf.push_back(AproxFactor(c.position,c.length/2,2));
+                facbuf.push_back(AproxFactor(c.position+c.length/2,c.length/2,2));
+
+                curr_factor_length = std::pow(int(c.length),c.vectorR.size());
+                for(bool b:c.vectorR){
+                    if(b){
+                        facbuf.push_back(AproxFactor(new_right_fac_pos(c.position,curr_factor_length,c.length),curr_factor_length,2));
+                    }
+                }
+
+            }
         }
+
+        len_t tree_level_by_size( len_t size){
+            len_t i=0;
+            len_t ws = WINDOW_SIZE;
+            while(ws!=size){
+                ws=ws/2;
+                i++;
+            }
+            return i;
+        }
+
+        void insert_first_occ(std::vector<AproxFactor> &facbuf,std::vector<std::unordered_multimap<long long, hmap_value>> &map_storage){
+            len_t wscopy = WINDOW_SIZE;
+            for(AproxFactor c :facbuf){
+               //get the right bucket
+               auto map_range= map_storage[tree_level_by_size(c.length)].equal_range(get_factor_hash_left(c));
+                    for (auto range_iter = map_range.first; range_iter != map_range.second; range_iter++) {
+                        c.firstoccurence=range_iter->second.first_occ;
+                    }
+            }
+
+        }
+
 
     public:
         inline static Meta meta()
@@ -271,7 +314,9 @@ namespace tdc
             //m.param must match template params and registery sub
             m.param("coder", "The output encoder.")
                 .strategy<lzss_coder_t>(TypeDesc("lzss_coder"));
+            m.param("window", "The sliding window size").primitive(16);
             m.param("threshold", "The minimum factor length.").primitive(2);
+            m.inherit_tag<lzss_coder_t>(tags::lossy);
             return m;
         }
 
@@ -279,45 +324,75 @@ namespace tdc
 
         inline virtual void compress(Input &input, Output &output) override
         {
-
+            
             input_view = input.as_view();
+            auto os = output.as_stream();
+            hash_provider = new stackoverflow_hash();
+            std::string ba ="abracadabracaabracadabracazz";
 
-            std::unordered_multimap<long long,std::pair<bool, len_t>> hmap;
+
+            //adjust window size
+            while (input_view.size() - 1 < WINDOW_SIZE)
+            {
+                WINDOW_SIZE = WINDOW_SIZE / 2;
+            }
+
+            std::vector<std::unordered_multimap<long long, hmap_value>> map_storage;
+            std::unordered_multimap<long long, hmap_value> hmap;
             std::vector<len_t> cherrylist;
 
-            //std::cout << "1"<<std::endl;
             populate_buffer(WINDOW_SIZE);
 
-            std::cout << std::endl;
-            for (Cherry cher : FactorBuffer)
-            {
-                std::cout <<cher.position << ", ";
-            }
-            std::cout << std::endl;
             len_t ws = WINDOW_SIZE;
 
-            while (ws>MIN_FACTOR_LENGTH){
-            
-                make_active_cherry_list(cherrylist,ws);
-            
-                rolling_hash rhash = std::make_tuple(hashfunction(0, ws), 0, ws);
-            
-                mark_cherrys(hmap,rhash);
-       
-                apply_findings(cherrylist);
-                ws=ws/2;
-                std::cout << "One level done"<<std::endl;
-            }
-            
-        
-
-
-            std::cout << std::endl;
-            for (Cherry cher : FactorBuffer)
+            while (ws > MIN_FACTOR_LENGTH)
             {
-                std::cout <<cher.position << ", ";
+
+                make_active_cherry_list(cherrylist);
+                for(len_t t:cherrylist){
+                    std::cout<< t <<",";
+                }
+                std::cout<<std::endl;
+                rhash = hash_provider->make_rolling_hash(0, ws / 2, input_view); //half because we test the children
+
+                populate_multimap(hmap, cherrylist);
+                for(len_t t:cherrylist){
+                    std::cout<< t <<",";
+                }
+                std::cout<<std::endl;
+                mark_cherrys(hmap);
+
+                apply_findings(cherrylist);
+                ws = ws / 2;
+
+                cherrylist.clear();
+                map_storage.push_back(hmap);
+                hmap.clear();
+
             }
-            std::cout << std::endl;
+            std::vector<AproxFactor> facbuf;
+
+            inflate_chains(facbuf);
+            insert_first_occ(facbuf,map_storage);
+
+            // initialize encoder
+            auto coder = lzss_coder_t(config().sub_config("coder"))
+            .encoder(output, NoLiterals());
+            coder.encode_header();
+
+            for(AproxFactor f:facbuf){
+
+                if(f.position!=f.firstoccurence){
+                    coder.encode_factor(lzss::Factor(f.position,f.firstoccurence,f.length));
+                }
+                else{
+                    for(int i =0;i<f.length;i++){
+                        coder.encode_factor(lzss::Factor(f.position,0,f.length));
+                    }
+                }
+            }
+
+
 
         }
 
