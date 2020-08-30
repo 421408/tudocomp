@@ -35,6 +35,7 @@ public:
         vectorL.push_back(true);
         vectorR.push_back(false);
         position = position +length/2;
+        firstoccurence=position;
         length=length/2;
         reset_found();
     }

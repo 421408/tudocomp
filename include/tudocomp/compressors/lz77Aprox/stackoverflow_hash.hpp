@@ -16,6 +16,9 @@ class stackoverflow_hash : public hash_interface{
 
     stackoverflow_hash(uint64_t pb,uint64_t pm):PRIME_BASE(pb),PRIME_MOD(pm){}
 
+    ~stackoverflow_hash(){};
+
+
     long long make_hash(len_t start, len_t size,View &input_view){
 
         //https://stackoverflow.com/a/712275

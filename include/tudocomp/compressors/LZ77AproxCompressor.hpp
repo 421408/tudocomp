@@ -44,8 +44,8 @@ namespace tdc
         };
 
         //this is ugly
-        len_t WINDOW_SIZE = 16;
-        const len_t MIN_FACTOR_LENGTH = 1;
+        len_t WINDOW_SIZE = 2048*2*2*2;
+        const len_t MIN_FACTOR_LENGTH = 16;
 
         std::vector<Cherry> FactorBuffer;
         View input_view;
@@ -158,7 +158,7 @@ namespace tdc
 
         void populate_multimap(std::unordered_multimap<long long, hmap_value> &hmap, std::vector<len_t> &cherrylist)
         {
-            for (len_t iter = 0; iter < cherrylist.size() - 1; iter++)
+            for (len_t iter = 0; iter < cherrylist.size() - 1 ; iter++)
             {
 
                 hmap.insert({get_factor_hash_left(FactorBuffer[iter]), hmap_value{false, len_t(iter)}});
@@ -169,12 +169,10 @@ namespace tdc
             {
                 len_t bull = FactorBuffer[cherrylist.back()].position;
                 len_t shit = FactorBuffer[cherrylist.back()].length / 2;
-                len_t bullshit = bull+shit;
-                std::cout<< "popmap:"<<std::endl<<"size view: "<<input_view.size()<<",Cherrylegth: "<<bullshit<<std::endl;
-                std::cout<<"bull:"<<bull<<"shit:"<<shit<<std::endl;
+                len_t bullshit = bull+shit-1;   // cause zeroth element
                 if (bullshit >= input_view.size()-1)
                 {
-                    std::cout<< "shouldme"<<std::endl;
+                    
                     //leftchild also reaches Beyond
                     FactorBuffer[cherrylist.back()].split();
                     FactorBuffer[cherrylist.back()].status = 7;
@@ -182,13 +180,16 @@ namespace tdc
                 }
                 else
                 {
-                    if (FactorBuffer[cherrylist.back()].position + FactorBuffer[cherrylist.back()].length / 2 < input_view.size()-1)
-                    {
-                        std::cout<< "not me"<<std::endl;
+
                         //only the right child reaches into the beyond
                         hmap.insert({get_factor_hash_left(FactorBuffer[cherrylist.back()]), hmap_value{false, cherrylist.back()}});
-                    }
+                    
                 }
+            }
+            else{
+                // last one isnt eof factor
+                hmap.insert({get_factor_hash_left(FactorBuffer[cherrylist.back()]), hmap_value{false, len_t(cherrylist.back())}});
+                hmap.insert({get_factor_hash_right(FactorBuffer[cherrylist.back()]), hmap_value{true, len_t(cherrylist.back())}});
             }
         }
 
@@ -196,10 +197,10 @@ namespace tdc
         {
 
             len_t insertoffset = 0;
-
+           std::cout<<cherrylist.size()<<std::endl;
             for (len_t index : cherrylist)
             {
-
+                //std::cout<<"index: "<< index <<std::endl;
                 if (FactorBuffer[index + insertoffset].rightfound && FactorBuffer[index + insertoffset].leftfound)
                 {
                     //cherrydone
@@ -237,7 +238,7 @@ namespace tdc
         //this is cancer
         len_t new_left_fac_pos(len_t position, len_t new_size, len_t orig_size) {
 
-            while (new_size > orig_size) {
+            while (new_size >= orig_size) {
                 position = position - new_size;
              new_size = new_size / 2;
          }
@@ -245,25 +246,21 @@ namespace tdc
 
         }
 
-        len_t new_right_fac_pos(len_t position, len_t new_size, len_t orig_size){
-            //adjust pos to end of cherry
-            position=position+orig_size;
-            while (new_size>orig_size){
-                position=position+new_size;
-                new_size=new_size/2;
-            }
-            return position;
-        }
 
-        void inflate_chains(std::vector<AproxFactor> &facbuf){
-            len_t cherry_length;
+
+ void inflate_chains(std::vector<AproxFactor> &facbuf){
+            std::vector<Cherry> check = FactorBuffer;
             len_t curr_factor_length;
-            for(Cherry c : FactorBuffer){
+            len_t new_pos;
 
+            for(len_t i =0; i<FactorBuffer.size();i++ ){
+                Cherry c=FactorBuffer[i];
                 curr_factor_length = std::pow(int(c.length),c.vectorL.size());
                 for(bool b:c.vectorL){
                     if(b){
-                        facbuf.push_back(AproxFactor(new_left_fac_pos(c.position,curr_factor_length,c.length),curr_factor_length,2));
+                        new_pos = new_left_fac_pos(c.position,curr_factor_length,c.length);
+                        facbuf.push_back(AproxFactor(new_pos,curr_factor_length,2));
+
                     }
                     curr_factor_length=curr_factor_length/2;
                 }
@@ -271,19 +268,23 @@ namespace tdc
                 facbuf.push_back(AproxFactor(c.position,c.length/2,2));
                 facbuf.push_back(AproxFactor(c.position+c.length/2,c.length/2,2));
 
-                curr_factor_length = std::pow(int(c.length),c.vectorR.size());
+                curr_factor_length = c.length;//cuse halfs you know?
+                new_pos = c.position+c.length;//first char of new fac
                 for(bool b:c.vectorR){
                     if(b){
-                        facbuf.push_back(AproxFactor(new_right_fac_pos(c.position,curr_factor_length,c.length),curr_factor_length,2));
-                    }
-                }
+                        facbuf.push_back(AproxFactor(new_pos,curr_factor_length,2));
 
+                        new_pos =new_pos+curr_factor_length;
+                        
+                    }
+                    curr_factor_length=curr_factor_length*2;
+                }
             }
         }
 
         len_t tree_level_by_size( len_t size){
             len_t i=0;
-            len_t ws = WINDOW_SIZE;
+            len_t ws = WINDOW_SIZE/2; //half because we test the children not the thing itself
             while(ws!=size){
                 ws=ws/2;
                 i++;
@@ -291,14 +292,27 @@ namespace tdc
             return i;
         }
 
-        void insert_first_occ(std::vector<AproxFactor> &facbuf,std::vector<std::unordered_multimap<long long, hmap_value>> &map_storage){
-            len_t wscopy = WINDOW_SIZE;
-            for(AproxFactor c :facbuf){
-               //get the right bucket
-               auto map_range= map_storage[tree_level_by_size(c.length)].equal_range(get_factor_hash_left(c));
-                    for (auto range_iter = map_range.first; range_iter != map_range.second; range_iter++) {
-                        c.firstoccurence=range_iter->second.first_occ;
+       void insert_first_occ(std::vector<AproxFactor> &facbuf,std::vector<std::unordered_multimap<long long, hmap_value>> &map_storage){
+
+            for(len_t i =0;i<facbuf.size();i++){
+
+                AproxFactor c = facbuf[i];
+                //get the right bucket
+                len_t k = tree_level_by_size(c.length);
+                //skip literals
+                if(k>map_storage.size()-1){
+                    continue;
+                }
+                long long h = get_factor_hash(c);
+                auto map_range= map_storage[k].equal_range(h);
+                for (auto range_iter = map_range.first; range_iter != map_range.second; range_iter++) {
+                    //cause if it is not found it could set to zero
+                    if(range_iter->second.index<facbuf[i].position&&range_iter->second.found) {
+                         
+                        facbuf[i].firstoccurence = range_iter->second.first_occ;
                     }
+                }
+
             }
 
         }
@@ -314,7 +328,7 @@ namespace tdc
             //m.param must match template params and registery sub
             m.param("coder", "The output encoder.")
                 .strategy<lzss_coder_t>(TypeDesc("lzss_coder"));
-            m.param("window", "The sliding window size").primitive(16);
+            m.param("window", "The starting window size").primitive(16);
             m.param("threshold", "The minimum factor length.").primitive(2);
             m.inherit_tag<lzss_coder_t>(tags::lossy);
             return m;
@@ -324,11 +338,17 @@ namespace tdc
 
         inline virtual void compress(Input &input, Output &output) override
         {
-            
+           
             input_view = input.as_view();
+            std::cout<<"hi"<<std::endl;
+            std::cout<<input_view.size()<<std::endl;
+            std::cout<<input_view[1]<<std::endl;
+            std::cout<<"hi"<<std::endl;
             auto os = output.as_stream();
             hash_provider = new stackoverflow_hash();
-            std::string ba ="abracadabracaabracadabracazz";
+
+
+
 
 
             //adjust window size
@@ -344,54 +364,56 @@ namespace tdc
             populate_buffer(WINDOW_SIZE);
 
             len_t ws = WINDOW_SIZE;
+            int round = 0;
+            
+            StatPhase::wrap("Factorization", [&]{
+                while (ws > MIN_FACTOR_LENGTH)
+                {
+                StatPhase::wrap("Round: "+std::to_string(round), [&]{
+                    StatPhase::log("numbers of cherrys", FactorBuffer.size());
+                    StatPhase::wrap("cherrylist: ", [&]{make_active_cherry_list(cherrylist);});
+                    std::cout<<"1"<<std::endl;
+                    StatPhase::log("numbers of active cherrys", cherrylist.size());
+                    rhash = hash_provider->make_rolling_hash(0, ws / 2, input_view); //half because we test the children
+                    std::cout<<"2"<<std::endl;
+                    StatPhase::wrap("make multimap: ", [&]{populate_multimap(hmap, cherrylist);});
+                    std::cout<<"3"<<std::endl;
+                    StatPhase::wrap("mar cherrys: ", [&]{mark_cherrys(hmap);});
+                    std::cout<<"4"<<std::endl;
+                    StatPhase::wrap("apply findings: ", [&]{apply_findings(cherrylist);});
+                    ws = ws / 2;
 
-            while (ws > MIN_FACTOR_LENGTH)
-            {
-
-                make_active_cherry_list(cherrylist);
-                for(len_t t:cherrylist){
-                    std::cout<< t <<",";
+                    cherrylist.clear();
+                    map_storage.push_back(hmap);
+                    hmap.clear();
+                    round++;
+                    //std::cout<<"level done"<<std::endl;
+                });
                 }
-                std::cout<<std::endl;
-                rhash = hash_provider->make_rolling_hash(0, ws / 2, input_view); //half because we test the children
-
-                populate_multimap(hmap, cherrylist);
-                for(len_t t:cherrylist){
-                    std::cout<< t <<",";
-                }
-                std::cout<<std::endl;
-                mark_cherrys(hmap);
-
-                apply_findings(cherrylist);
-                ws = ws / 2;
-
-                cherrylist.clear();
-                map_storage.push_back(hmap);
-                hmap.clear();
-
-            }
+            });
             std::vector<AproxFactor> facbuf;
-
             inflate_chains(facbuf);
+
+
             insert_first_occ(facbuf,map_storage);
 
-            // initialize encoder
-            auto coder = lzss_coder_t(config().sub_config("coder"))
-            .encoder(output, NoLiterals());
-            coder.encode_header();
 
-            for(AproxFactor f:facbuf){
+            lzss::FactorBufferRAM factors;
+            for(AproxFactor f: facbuf){
 
-                if(f.position!=f.firstoccurence){
-                    coder.encode_factor(lzss::Factor(f.position,f.firstoccurence,f.length));
-                }
-                else{
-                    for(int i =0;i<f.length;i++){
-                        coder.encode_factor(lzss::Factor(f.position,0,f.length));
-                    }
+                if(f.firstoccurence!=f.position){
+                    
+                    factors.push_back(f.position,f.firstoccurence,f.length);
                 }
             }
 
+            // encode
+            StatPhase::wrap("Encode", [&]{
+            auto coder = lzss_coder_t(config().sub_config("coder")).encoder(
+                output, lzss::UnreplacedLiterals<decltype(input_view), decltype(factors)>(input_view, factors));
+
+            coder.encode_text(input_view, factors);
+            });
 
 
         }

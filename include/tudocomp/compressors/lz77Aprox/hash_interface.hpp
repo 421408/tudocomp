@@ -17,7 +17,7 @@ namespace tdc{
         public:
 
         
-        ~hash_interface();
+        virtual ~hash_interface(){};
 
         virtual long long make_hash(len_t start, len_t size,View &inputview) =0;
 
