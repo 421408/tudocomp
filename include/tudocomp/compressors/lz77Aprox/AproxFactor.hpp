@@ -15,11 +15,11 @@ namespace tdc{
          *  7= eof factor
          *  TODO: maybe check type of class for fewer stati(statuses?)
          */
-        unsigned int status : 3;
-        //position never changes only length gets smaler and new factors are created
-         len_compact_t position;
+        mutable unsigned int status : 3;
+        
+        len_compact_t position;
 
-        len_compact_t length, firstoccurence;
+        mutable len_compact_t length, firstoccurence;
         /*TODO:
          * 1: position could be divided by min FactorLength to shorten it.
          * 2: length is always a power of 2 between maxWindowLength and minFactorLength
@@ -39,5 +39,8 @@ namespace tdc{
             status= flag;
             firstoccurence=position;
         }
+            bool operator< (AproxFactor x  )const{
+        return this->position< x.position;
+    }
     };
 }

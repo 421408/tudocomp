@@ -5,49 +5,78 @@
 #include <vector>
 namespace tdc{
 
-class Cherry : public AproxFactor{
+class Cherry {
 public:
-    /*  Left and right Vector which holds information about the chains
+     /*  Left and right Vector which holds information about the chains
      *  of the cherry
      */
-    std::vector<bool> vectorL ,vectorR;
+    mutable long long l :64;
+    mutable long long r :64;
+
+    mutable unsigned int status : 3;
+        
+    len_compact_t position;
+        
+    mutable len_compact_t length;
+
+
     //which children are found
-    bool leftfound, rightfound;
-    Cherry(len_t position, len_t length, int flag):AproxFactor(position,length,flag){
+   mutable bool leftfound, rightfound;
+    Cherry(len_t pos, len_t len, len_t fl){
+        position = pos;
+        length=len;
+        status = fl;
+
+        l=0;
+        r=0;
         leftfound=false;
         rightfound=false;
+    }
+
+    inline Cherry(){
+        //undefined!
     }
     
     //return the rightchild and turns this into leftchild
-    Cherry split(){
+    // this is const cause status and length are mutable
+    inline Cherry split() const {
         Cherry rightchild = Cherry(position + length/2,length/2,0);
-        //ihope this coyps
-        rightchild.vectorR = vectorR;
+        rightchild.r=r;
+        r=0;
+
         rightchild.status=status;
         //change this
-        vectorR.clear();
+
         length=length/2;
         status=0;
         //return
+
         return rightchild;
     }
-    void only_leftfound(){
-        vectorL.push_back(true);
-        vectorR.push_back(false);
+    //this is the only non-const func cause we change the position
+    inline void only_leftfound(){
+        //add a 1 at the right pos
+        l=l+length/2;
         position = position +length/2;
-        firstoccurence=position;
+        
         length=length/2;
+
         reset_found();
     }
-    void only_rightfound(){
-        vectorL.push_back(false);
-        vectorR.push_back(true);
+    inline void only_rightfound() const {
+        r=r+length/2;
         length=length/2;
         reset_found();
+
     }
-    void reset_found(){
+    inline void reset_found()const{
         rightfound=false;
         leftfound=false;
+
+    }
+
+    bool operator< (Cherry x  )const{
+        return this->position< x.position;
     }
 };
 

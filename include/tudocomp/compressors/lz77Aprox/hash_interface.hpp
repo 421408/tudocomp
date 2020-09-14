@@ -10,6 +10,7 @@ namespace tdc{
         len_t position,length;
         long long hashvalue;
         View input_view;
+        long long c0_exp;
     };
     
 
@@ -19,10 +20,10 @@ namespace tdc{
         
         virtual ~hash_interface(){};
 
-        virtual long long make_hash(len_t start, len_t size,View &inputview) =0;
+        virtual long long make_hash(len_t start, len_t size,io::InputView &input_view) =0;
 
-        virtual rolling_hash make_rolling_hash(len_t start,len_t size,View &inputview)=0;
+        virtual rolling_hash make_rolling_hash(len_t start,len_t size,io::InputView &input_view)=0;
 
-        virtual void advance_rolling_hash(rolling_hash &rhash) =0;
+        virtual void advance_rolling_hash(rolling_hash &rhash,io::InputView &input_view) =0;
     };
     }//ns
