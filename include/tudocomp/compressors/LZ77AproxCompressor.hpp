@@ -425,13 +425,13 @@ namespace tdc
                         StatPhase::log("numbers of active cherrys", cherrylist.size());
                         rhash = hash_provider->make_rolling_hash(0, ws / 2, input_view); //half because we test the children
                         //std::cout << "2" << std::endl;
-                        hmap =  std::unordered_map<long long, hmap_value>();
+                       
                         StatPhase::wrap("make multimap: ", [&] { populate_multimap(hmap, cherrylist, input_view); });
                         //std::cout << "3" << std::endl;
-                        
+                        temp_store =  std::unordered_map<long long,len_t>();
                         StatPhase::wrap("mark cherrys: ", [&] { mark_cherrys(hmap, temp_store, input_view); });
                         //std::cout << "4" << std::endl;
-                        
+                         hmap =  std::unordered_map<long long, hmap_value>();
                         StatPhase::wrap("store map: ", [&] {map_storage.push_back(temp_store);});
                         temp_store.clear();
                         StatPhase::wrap("apply findings: ", [&] { apply_findings(cherrylist); });

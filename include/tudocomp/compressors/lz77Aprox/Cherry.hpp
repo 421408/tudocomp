@@ -78,6 +78,6 @@ public:
     bool operator< (Cherry x  )const{
         return this->position< x.position;
     }
-};
+}__attribute__((__packed__));
 
 }
