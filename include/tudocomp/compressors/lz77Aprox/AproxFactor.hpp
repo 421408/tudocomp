@@ -42,5 +42,5 @@ namespace tdc{
             bool operator< (AproxFactor x  )const{
         return this->position< x.position;
     }
-    };
+    }__attribute__((__packed__));
 }

@@ -17,8 +17,10 @@
 #include <string>
 #include <tuple>
 #include <iostream>
+#include <deque>
 
 #include <tudocomp/def.hpp>
+#include <tudocomp/util/compact_hash/map/typedefs.hpp>
 
 #include <tudocomp/compressors/lzss/FactorBuffer.hpp>
 #include <tudocomp/compressors/lzss/UnreplacedLiterals.hpp>
@@ -48,8 +50,8 @@ namespace tdc
         };
 
         //this is ugly
-        len_t WINDOW_SIZE = 2048  ;
-        const len_t MIN_FACTOR_LENGTH = 4;
+        len_t WINDOW_SIZE  ;
+        len_t MIN_FACTOR_LENGTH;
 
         std::set<Cherry> FactorBuffer;
         hash_interface *hash_provider;
@@ -183,6 +185,8 @@ namespace tdc
 
         void populate_multimap(std::unordered_map<long long, hmap_value> &hmap, std::vector<std::set<Cherry>::iterator> &cherrylist, io::InputView &input_view)
         {
+            hmap.reserve(cherrylist.size()*2);
+
             for (len_t iter = 0; iter < cherrylist.size() - 1; iter++)
             {
                 insert_factor(hmap, cherrylist[iter], input_view);
@@ -267,7 +271,7 @@ namespace tdc
         }
 
 
-        void inflate_chains(std::vector<AproxFactor> &facbuf, io::InputView &input_view)
+        void inflate_chains(std::deque<AproxFactor> &facbuf, io::InputView &input_view)
         {
 
             unsigned long long k = 0;
@@ -291,10 +295,10 @@ namespace tdc
                     position = position + length;
                 }
 
-                if(position!=c.position){
-                    std::cout <<"pos: "<<position<<"c.pos: "<<c.position<<std::endl;
-                    throw std::invalid_argument( "not ordered" );
-                }
+                //if(position!=c.position){
+                //    std::cout <<"pos: "<<position<<"c.pos: "<<c.position<<std::endl;
+                //    throw std::invalid_argument( "not ordered" );
+                //}
 
                 facbuf.push_back(AproxFactor(c.position, c.length / 2, 2));
                 facbuf.push_back(AproxFactor(c.position + c.length / 2, c.length / 2, 2));
@@ -334,7 +338,7 @@ namespace tdc
             return i;
         }
 
-        void insert_first_occ(std::vector<AproxFactor> &facbuf, std::vector<std::unordered_map<long long,len_t>> &map_storage, io::InputView &input_view)
+        void insert_first_occ(std::deque<AproxFactor> &facbuf, std::vector<std::unordered_map<long long,len_t>> &map_storage, io::InputView &input_view)
         {
             len_t x= __builtin_clz(WINDOW_SIZE/2);
             for (len_t i = 0; i < facbuf.size(); i++)
@@ -342,7 +346,7 @@ namespace tdc
 
                 AproxFactor c = facbuf[i];
                 //get the right bucket
-                len_t k = __builtin_clz(c.length)-x;;
+                len_t k = __builtin_clz(c.length-x);
                 //skip literals
                 if (k > map_storage.size() - 1)
                 {
@@ -352,11 +356,11 @@ namespace tdc
 
                 if (map_storage[k].end() != map_storage[k].find(h))
                 {
-                    if((map_storage[k])[h]>facbuf[i].position){
-                        std::cout<<"src: "<<(map_storage[k])[h]<<" pos: "<<facbuf[i].position<<std::endl;
-                        std::cout<<"src: "<<input_view.substr( (map_storage[k])[h], facbuf[i].length)<<" pos: "<< input_view.substr(facbuf[i].position,facbuf[i].length)<<std::endl;
-                        throw std::invalid_argument( "received negative value" );
-                    }
+                    //if((map_storage[k])[h]>facbuf[i].position){
+                    //    std::cout<<"src: "<<(map_storage[k])[h]<<" pos: "<<facbuf[i].position<<std::endl;
+                    //    std::cout<<"src: "<<input_view.substr( (map_storage[k])[h], facbuf[i].length)<<" pos: "<< input_view.substr(facbuf[i].position,facbuf[i].length)<<std::endl;
+                    //    throw std::invalid_argument( "forward reference" );
+                    //}
                     facbuf[i].firstoccurence = (map_storage[k])[h];
                 }
             }
@@ -384,13 +388,21 @@ namespace tdc
         inline virtual void compress(Input &input, Output &output) override
         {
             io::InputView input_view = input.as_view();
-
-            std::cout << "hi" << std::endl;
-            std::cout << input_view.size() << std::endl;
-            std::cout << int(input_view[1]) << std::endl;
-
+            WINDOW_SIZE=config().param("window").as_int() *2;
+            MIN_FACTOR_LENGTH= config().param("threshold").as_int();
+            //std::cout << "ws:"<<WINDOW_SIZE << std::endl;
+            //std::cout << "mfl: "<<MIN_FACTOR_LENGTH << std::endl;
+            
             auto os = output.as_stream();
+            //choose hash here
             hash_provider = new stackoverflow_hash();
+
+            auto map = tdc::compact_hash::map::sparse_cv_hashmap_t<int>(0, 4);
+            //make reusable containers
+            std::vector<std::unordered_map<long long, len_t>> map_storage;
+            std::unordered_map<long long, hmap_value> hmap;
+            std::vector<std::set<Cherry>::iterator> cherrylist;
+            std::unordered_map<long long, len_t> temp_store;
 
             //adjust window size
             while (input_view.size() - 1 < WINDOW_SIZE)
@@ -398,42 +410,38 @@ namespace tdc
                 WINDOW_SIZE = WINDOW_SIZE / 2;
             }
 
-            std::vector<std::unordered_map<long long, len_t>> map_storage;
-            std::unordered_map<long long, hmap_value> hmap;
-            std::vector<std::set<Cherry>::iterator> cherrylist;
-            std::unordered_map<long long, len_t> temp_store;
-
+            //init the buffer
             populate_buffer(WINDOW_SIZE, input_view);
 
             len_t ws = WINDOW_SIZE;
-            std::cout << "ws:" << ws << ",MINFACTORLENGTH: " << MIN_FACTOR_LENGTH << std::endl;
+            //std::cout << "ws:" << ws << ",MINFACTORLENGTH: " << MIN_FACTOR_LENGTH << std::endl;
             len_t round = 0;
 
-            StatPhase::wrap("Init", [&] { std::cout << "0" << std::endl; });
-
+            //start Phase1 loop
             StatPhase::wrap("Factorization", [&] {
                 while (ws > MIN_FACTOR_LENGTH)
                 {
 
                     StatPhase::wrap("Round: " + std::to_string(round), [&] {
-                        std::cout << FactorBuffer.size() << std::endl;
+                       // std::cout << FactorBuffer.size() << std::endl;
                         StatPhase::log("numbers of cherrys", FactorBuffer.size());
                         //std::cout << "0" << std::endl;
                         StatPhase::wrap("cherrylist: ", [&] { make_active_cherry_list(cherrylist); });
                         //std::cout << "1" << std::endl;
-                        std::cout << "active: " << cherrylist.size() << std::endl;
+                        //std::cout << "active: " << cherrylist.size() << std::endl;
                         StatPhase::log("numbers of active cherrys", cherrylist.size());
                         rhash = hash_provider->make_rolling_hash(0, ws / 2, input_view); //half because we test the children
                         //std::cout << "2" << std::endl;
                        
                         StatPhase::wrap("make multimap: ", [&] { populate_multimap(hmap, cherrylist, input_view); });
-                        //std::cout << "3" << std::endl;
-                        temp_store =  std::unordered_map<long long,len_t>();
+                        std::cout << "3" << std::endl;
+                       
                         StatPhase::wrap("mark cherrys: ", [&] { mark_cherrys(hmap, temp_store, input_view); });
-                        //std::cout << "4" << std::endl;
-                         hmap =  std::unordered_map<long long, hmap_value>();
+                        std::cout << "4" << std::endl;
+                        hmap =  std::unordered_map<long long, hmap_value>();
+                       
                         StatPhase::wrap("store map: ", [&] {map_storage.push_back(temp_store);});
-                        temp_store.clear();
+                        temp_store =  std::unordered_map<long long,len_t>();
                         StatPhase::wrap("apply findings: ", [&] { apply_findings(cherrylist); });
                         ws = ws / 2;
                         cherrylist.clear();
@@ -447,40 +455,44 @@ namespace tdc
 
 
 
-            len_t last_pos = 0;
+           
             len_t il = 0;
 
 
-            std::vector<AproxFactor> facbuf;
+            std::deque<AproxFactor> facbuf;
             
             StatPhase::wrap("inflate chains: ", [&] {inflate_chains(facbuf,input_view);});
             FactorBuffer.clear();
             
             
-             std::cout << "inflate done. facbuf size: "<<facbuf.size() << std::endl;
+            std::cout << "inflate done. facbuf size: "<<facbuf.size() << std::endl;
             StatPhase::wrap("insert src: ", [&] {insert_first_occ(facbuf, map_storage,input_view);});
             map_storage.clear();
             map_storage.shrink_to_fit();
-             std::cout << "start encode." << std::endl;
+            std::cout << "start encode." << std::endl;
             lzss::FactorBufferRAM factors;
             delete hash_provider;
-            last_pos = 0;
+           
             il = 0;
-            for (AproxFactor f : facbuf)
-            {
-                il++;
-                if (f.firstoccurence != f.position)
-                {
-                    if (f.position <= last_pos)
+            
+           for(AproxFactor f:facbuf){
+                
+                    if (facbuf.front().firstoccurence != facbuf.front().position)
                     {
-                        std::cout << "il: " << il << " last_pos: " << last_pos << "  pos: " << f.position << std::endl;
-                        throw std::invalid_argument("not sorted");
+                        //if ((f.position <= last_pos)&&(last_pos!=0))
+                        //{   
+                        //    std::cout << "il: " << il << " last_pos: " << last_pos << "  pos: " << f.position << std::endl;
+                        //    throw std::invalid_argument("not sorted");
+                        //}
+                        factors.push_back(f.position, f.firstoccurence, f.length);
+                        //last_pos = f.position;
+                        il++;
+                        
                     }
-                    factors.push_back(f.position, f.firstoccurence, f.length);
-                    last_pos = f.position;
-                }
+                  facbuf.pop_front();
             }
-
+            facbuf.shrink_to_fit();
+            std::cout<<"found facs: "<<il<<std::endl;
 
             // encode
             StatPhase::wrap("Encode", [&] {

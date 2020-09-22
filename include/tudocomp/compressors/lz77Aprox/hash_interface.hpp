@@ -9,7 +9,6 @@ namespace tdc{
     {
         len_t position,length;
         long long hashvalue;
-        View input_view;
         long long c0_exp;
     };
     
