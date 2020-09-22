@@ -346,7 +346,7 @@ namespace tdc
 
                 AproxFactor c = facbuf[i];
                 //get the right bucket
-                len_t k = __builtin_clz(c.length-x);
+                len_t k = __builtin_clz(c.length)-x;
                 //skip literals
                 if (k > map_storage.size() - 1)
                 {
@@ -472,24 +472,24 @@ namespace tdc
             std::cout << "start encode." << std::endl;
             lzss::FactorBufferRAM factors;
             delete hash_provider;
-           
+            int last_pos =0;
             il = 0;
             
            for(AproxFactor f:facbuf){
                 
-                    if (facbuf.front().firstoccurence != facbuf.front().position)
+                    if (f.firstoccurence != f.position)
                     {
-                        //if ((f.position <= last_pos)&&(last_pos!=0))
-                        //{   
-                        //    std::cout << "il: " << il << " last_pos: " << last_pos << "  pos: " << f.position << std::endl;
-                        //    throw std::invalid_argument("not sorted");
-                        //}
+                        if ((f.position <= last_pos)&&(last_pos!=0))
+                        {   
+                            std::cout << "il: " << il << " last_pos: " << last_pos << "  pos: " << f.position << std::endl;
+                            throw std::invalid_argument("not sorted");
+                        }
                         factors.push_back(f.position, f.firstoccurence, f.length);
-                        //last_pos = f.position;
+                        last_pos = f.position;
                         il++;
                         
                     }
-                  facbuf.pop_front();
+                  
             }
             facbuf.shrink_to_fit();
             std::cout<<"found facs: "<<il<<std::endl;
