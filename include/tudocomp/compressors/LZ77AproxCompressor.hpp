@@ -185,7 +185,7 @@ namespace tdc
 
         void populate_multimap(std::unordered_map<long long, hmap_value> &hmap, std::vector<std::set<Cherry>::iterator> &cherrylist, io::InputView &input_view)
         {
-            hmap.reserve(cherrylist.size()*2);
+            hmap.reserve(cherrylist.size());
 
             for (len_t iter = 0; iter < cherrylist.size() - 1; iter++)
             {
