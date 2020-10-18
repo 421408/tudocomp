@@ -14,19 +14,22 @@
 //custom
 
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <tuple>
 #include <iostream>
 #include <deque>
 
+#include <tudocomp/util/bits.hpp>
 #include <tudocomp/def.hpp>
 #include <tudocomp/util/compact_hash/map/typedefs.hpp>
 
 #include <tudocomp/compressors/lzss/FactorBuffer.hpp>
 #include <tudocomp/compressors/lzss/UnreplacedLiterals.hpp>
 
-#include <tudocomp/compressors/lz77Aprox/AproxFactor.hpp>
-#include <tudocomp/compressors/lz77Aprox/Cherry.hpp>
+#include <tudocomp/compressors/lz77Aprox/Group.hpp>
+#include <tudocomp/compressors/lz77Aprox/Chain.hpp>
+#include <tudocomp/compressors/lz77Aprox/Factor.hpp>
 #include <tudocomp/compressors/lz77Aprox/hash_interface.hpp>
 #include <tudocomp/compressors/lz77Aprox/stackoverflow_hash.hpp>
 
@@ -37,333 +40,330 @@ namespace tdc
     {
 
     private:
-        struct cherry_child_ref
+        //fills the given chain container with the right a mount of chains
+        void populate_chainbuffer(std::vector<Chain> &curr_Chains, len_compact_t size, io::InputView &input_view)
         {
-            bool right;
-            std::set<Cherry>::iterator index;
-        };
-
-        struct hmap_value
-        {
-            cherry_child_ref first_factor;
-           
-        };
-
-        //this is ugly
-        len_t WINDOW_SIZE  ;
-        len_t MIN_FACTOR_LENGTH;
-
-        std::set<Cherry> FactorBuffer;
-        hash_interface *hash_provider;
-
-        rolling_hash rhash;
-
-        inline long long get_factor_hash(AproxFactor &fac, io::InputView &input_view) { return hash_provider->make_hash(fac.position, fac.length, input_view); }
-
-        inline long long get_factor_hash_left(Cherry &fac, io::InputView &input_view) { return hash_provider->make_hash(fac.position, (fac.length / 2), input_view); }
-
-        inline long long get_factor_hash_right(Cherry &fac, io::InputView &input_view) { return hash_provider->make_hash(fac.position + fac.length / 2, fac.length / 2, input_view); }
-
-        //this function fills the FactorBuffer with the "first row" of the "tree"
-        //TODO typedef FactorFlags cause they are ugly now (and unreadable)
-        void populate_buffer(len_t window_size, io::InputView &input_view)
-        {
-            len_t position(0);
-            //run until the next factor would reach beyond the file
-
-            for (len_t i = 0; i <= input_view.size() - 1 - window_size; i = i + window_size)
+            //std::cout<<"pop:"<<std::endl;
+            for (len_compact_t i = 0; i < input_view.size() - size * 2; i = i + size)
             {
-
-                FactorBuffer.emplace(Cherry(position, window_size, 0));
-                ;
-
-                //cant use i after scope but must know pos for eof handle
-                //if you use position in loop last step will be missing and you dont know if it its exactly
-                position = position + window_size;
-            }
-
-            //marks the last factor as eof-factor if the Factor border lies beyond the end of the file
-            //note that only the very last Factor in the Buffer can have flag 7 so only ever check the last factor for this case
-            if (position < input_view.size())
-            {
-                FactorBuffer.emplace(Cherry(position, window_size, 7));
+                //std::cout<<"i: "<<i<<std::endl;
+                curr_Chains.push_back(Chain(64, i));
+                //std::cout<<"back: "<<curr_Chains.back().get_position()<<std::endl;
             }
         }
 
-        //scans the FactorBuffer for all cherrys to be tested
-        void make_active_cherry_list(std::vector<std::set<Cherry>::iterator> &vec)
+        void fill_chain_hashmap(std::unordered_map<uint64_t, len_compact_t> &hmap, std::vector<Chain> &curr_Chains, len_compact_t size, io::InputView &input_view, hash_interface *hash_provider)
         {
-            for (auto iter = FactorBuffer.begin(); iter != FactorBuffer.end(); iter++)
-            {
-                if ((*iter).status == 0 || (*iter).status == 7)
-                {
-                    vec.push_back(iter);
-                }
-            }
-        }
+            hmap.reserve(curr_Chains.size());
 
-        //searches with the rolling hash over the view and marks all children of the cherrys if found
-        void mark_cherrys(std::unordered_map<long long, hmap_value> &hmap, std::unordered_map<long long, len_t> &storage, io::InputView &input_view)
-        {
-            //dont let the hash rollbeyond the view
-            //main loop over the entire view
-            for (len_t i = 0; i < input_view.size() - 1 - rhash.length; i++)
-            {
+            uint64_t hash;
+            std::unordered_map<uint64_t, len_compact_t>::iterator iter;
 
-                //check if key exists
-                if (hmap.end() != hmap.find(rhash.hashvalue))
+            //std::cout<<"0:1"<<std::endl;
+
+            for (len_compact_t i = 0; i < curr_Chains.size(); i++)
+            {
+                //increasing chain left
+                //std::cout<<"0:2"<<std::endl;
+                //std::cout<<curr_Chains[i].get_position()<<std::endl;
+                hash = hash_provider->make_hash(curr_Chains[i].get_position(), size, input_view);
+                //std::cout<<"0:3"<<std::endl;
+                iter = hmap.find(hash);
+                //std::cout<<"0:4"<<std::endl;
+                if (iter != hmap.end())
                 {
-                    if (hmap[rhash.hashvalue].first_factor.right)
-                    {
-                        if (rhash.position < (*hmap[rhash.hashvalue].first_factor.index).position +
-                                                 (*hmap[rhash.hashvalue].first_factor.index).length / 2)
-                        {
-                            //rolling hash matches and lies before the first factor
-                            
-                            (*hmap[rhash.hashvalue].first_factor.index).rightfound = true;
-                        }
+                    if(curr_Chains[iter->second].get_position()<curr_Chains[i].get_position()){
+                        curr_Chains[i].add(size);
                     }
-                    else
-                    {
-                        //left factor
-                        if (rhash.position < (*hmap[rhash.hashvalue].first_factor.index).position)
-                        {
-                            //rolling hash matches and lies before the first factor
-                            
-                            (*hmap[rhash.hashvalue].first_factor.index).leftfound = true;
-                        }
+                    else{
+                        curr_Chains[iter->second].add(size);
+                        hmap[hash]=i;
                     }
-
-                    //storage
-                    storage[rhash.hashvalue] = rhash.position;
-
-                    //rolling hash reached the first occurence
-                    // we cant find it beyond here
-                    //so remove it from the hmap
-                    hmap.erase(rhash.hashvalue);
-                }
-                hash_provider->advance_rolling_hash(rhash,input_view);
-            }
-            hmap.clear();
-        }
-
-        //inserts the childern of a factor correctly into an unordered map
-        //to correnctly set the first occurence insert factors from left to right
-        void insert_factor(std::unordered_map<long long, hmap_value> &hmap, std::set<Cherry>::iterator &index, io::InputView &input_view)
-        {
-
-            //doesnt work otherwise dunno why
-            Cherry k = *index;
-            long long hash = get_factor_hash_left(k, input_view);
-
-            //std::cout << "1" << std::endl;
-            //left key exists
-            if (hmap.end() != hmap.find(hash))
-            {
-                //if key exist before this one we only need to search thefirst of those
-                (*index).leftfound = true;
-            }
-            else
-            {
-                //left key doesnt exist before set first_occ to position of factor
-                hmap[hash] = hmap_value{cherry_child_ref{false, index}};
-            }
-            hash = get_factor_hash_right(k, input_view);
-            //std::cout << "2" << std::endl;
-            //right key exists
-            if (hmap.end() != hmap.find(hash))
-            {
-                //if key exist before this one we only need to search thefirst of those
-                (*index).rightfound = true;
-            }
-            else
-            {
-                //right key doesnt exist before set first_occ to position of factor
-                hmap[hash] = hmap_value{cherry_child_ref{true, index}};
-            }
-        }
-
-        void populate_multimap(std::unordered_map<long long, hmap_value> &hmap, std::vector<std::set<Cherry>::iterator> &cherrylist, io::InputView &input_view)
-        {
-            hmap.reserve(cherrylist.size());
-
-            for (len_t iter = 0; iter < cherrylist.size() - 1; iter++)
-            {
-                insert_factor(hmap, cherrylist[iter], input_view);
-            }
-            Cherry c = (*cherrylist.back());
-            //handle eof
-            if ((*cherrylist.back()).status == 7)
-            {
-                len_t bull = c.position;
-                len_t shit = c.length / 2;
-                len_t bullshit = bull + shit - 1; //-1 to account for the fact that we dont start at 0
-
-                if (bullshit >= input_view.size() - 1)
-                {
-                    //leftchild also reaches Beyond
-                    c.split();
-                    c.status = 7;
-                    //erase old Cherry
-                    FactorBuffer.erase(cherrylist.back());
-                    //add new Cherry
-                    FactorBuffer.insert(c);
-                    //new Cherry ist active and iter is invalid
-                    cherrylist.pop_back();
+                    // if(size>4096){
+                    // std::cout<<"size to large chain: "<<curr_Chains[i].get_chain()<<" size: "<<size<<std::endl;
+                    // throw std::invalid_argument( "chain to large group4" );
+                    // }
                 }
                 else
                 {
-                    //only the right child reaches into the beyond
-                    long long hash = get_factor_hash_left(c,input_view);
-                    //left key exists
-                    if (hmap.end() != hmap.find(hash))
+                    hmap[hash] = i;
+                }
+            }
+        }
+
+        void phase1_search(std::unordered_map<uint64_t, len_compact_t> &hmap, std::vector<Chain> &curr_Chains, len_compact_t size, io::InputView &input_view, hash_interface *hash_provider)
+        {
+
+            rolling_hash rhash = hash_provider->make_rolling_hash(0, size, input_view);
+            len_compact_t index;
+            std::cout<<"sizep1s: "<<size<<std::endl;
+            std::unordered_map<uint64_t, len_compact_t>::iterator iter;
+
+            for (len_compact_t i = size; i < input_view.size(); i++)
+            {
+
+                iter = hmap.find(rhash.hashvalue);
+                if (iter != hmap.end())
+                {
+                    index = hmap[rhash.hashvalue];
+                    if (rhash.position < curr_Chains[index].get_position())
                     {
-                        cherrylist.back()->leftfound = true;
+                        curr_Chains[index].add(size);
+                    //     if(curr_Chains[index].get_chain()>(4096*2)-1){
+                    // std::cout<<"size to large chain: "<<curr_Chains[i].get_chain()<<" size: "<<size<<std::endl;
+                    // throw std::invalid_argument( "chain to large group4" );
+                    // }
                     }
-                    else
-                    {
-                        //left key doesnt exist before set first_occ to position of factor
-                        hmap[hash] = hmap_value{cherry_child_ref{false, cherrylist.back()}};
-                    }
+                    hmap.erase(rhash.hashvalue);
                 }
-            }
-            else
-            {
-                // last one isnt eof factor
-                insert_factor(hmap, cherrylist.back(), input_view);
+                hash_provider->advance_rolling_hash(rhash, input_view);
             }
         }
 
-        void apply_findings(std::vector<std::set<Cherry>::iterator> &cherrylist)
+        void new_chains(std::vector<Chain> &Chains, len_compact_t size, std::vector<Chain> &phase2_buffer)
         {
 
-            Cherry c;
+            Chain left;
+            bool curr_left;
+            Chain right;
+            bool curr_right;
+            len_compact_t curr_size;
 
-            for (std::set<Cherry>::iterator iter : cherrylist)
+            len_compact_t oldsize = Chains.size();
+
+            for (len_compact_t i = 0; i < oldsize  && i<Chains.size(); i = i + 2)
             {
+                left = Chains[i];
+                right = Chains[i + 1];
+                curr_left = left.get_chain() & size;
+                curr_right = right.get_chain() & size;
 
-                switch ((*iter).rightfound * 1 + (*iter).leftfound * 2)
+                //only insert new chains if neither are found
+                if (!(curr_right || curr_left))
                 {
-                case 0:
-                    //neither left nor right found -> new cherry
-                    FactorBuffer.emplace((*iter).split());
+                    //old left has nothing to do
 
-                    break;
-                case 1:
-                    //only right found
-                    (*iter).only_rightfound();
+                    //new right
+                    Chains[i + 1] = Chain(64, left.get_position() + size / 2);
+                    //new left
+                    Chains.push_back(Chain(64, right.get_position()));
+                    //old right
+                    right.set_position(right.get_position() + size / 2);
+                    Chains.push_back(right);
 
-                    break;
-                case 2:
-                    //only leftfound
-                    c = (*iter);
-                    FactorBuffer.erase(iter);
-                    c.only_leftfound();
-                    FactorBuffer.insert(c);
-
-                    break;
-                case 3: //cherrydone
-                    (*iter).status = 1;
-
-                    break;
-                }
-            }
-        }
-
-
-        void inflate_chains(std::deque<AproxFactor> &facbuf, io::InputView &input_view)
-        {
-
-            unsigned long long k = 0;
-
-            len_t length = 0;
-            len_t position = 0;
-            Cherry c;
-            Cherry last = *(std::prev(FactorBuffer.end()));
-            FactorBuffer.erase(std::prev(FactorBuffer.end()));
-            //std::cout << "tt test" << std::endl;
-           while(!FactorBuffer.empty())
-            {
-                c=(*FactorBuffer.begin());
-                FactorBuffer.erase(FactorBuffer.begin());
-                while (c.l > 0)
-                {
-                    k = (63 - __builtin_clzll(c.l));
-                    length = 1 << k;
-                    facbuf.push_back(AproxFactor(position, length, 2));
-                    c.l = c.l - length;
-                    position = position + length;
-                }
-
-                //if(position!=c.position){
-                //    std::cout <<"pos: "<<position<<"c.pos: "<<c.position<<std::endl;
-                //    throw std::invalid_argument( "not ordered" );
-                //}
-
-                facbuf.push_back(AproxFactor(c.position, c.length / 2, 2));
-                facbuf.push_back(AproxFactor(c.position + c.length / 2, c.length / 2, 2));
-
-                position = c.position + c.length;
-                while (c.r > 0)
-                {
-                    k = (__builtin_ctzll(c.r));
-                    length = 1 << k;
-                    facbuf.push_back(AproxFactor(position, length, 2));
-                    c.r = c.r - length;
-                    position = position + length;
-                }
-                
-            }
-            //eof
-            while (last.l > 0)
-            {
-                k = (63 - __builtin_clzll(last.l));
-                length = 1 << k;
-                facbuf.push_back(AproxFactor(position, length, 2));
-                last.l = last.l - length;
-                position = position + length;
-            }
-            facbuf.push_back(AproxFactor(last.position, input_view.size() - last.position, 2));
-        }
-
-        len_t tree_level_by_size(len_t size)
-        {
-            len_t i = 0;
-            len_t ws = WINDOW_SIZE / 2; //half because we test the children not the thing itself
-            while (ws != size)
-            {
-                ws = ws / 2;
-                i++;
-            }
-            return i;
-        }
-
-        void insert_first_occ(std::deque<AproxFactor> &facbuf, std::vector<std::unordered_map<long long,len_t>> &map_storage, io::InputView &input_view)
-        {
-            len_t x= __builtin_clz(WINDOW_SIZE/2);
-            for (len_t i = 0; i < facbuf.size(); i++)
-            {
-
-                AproxFactor c = facbuf[i];
-                //get the right bucket
-                len_t k = __builtin_clz(c.length)-x;
-                //skip literals
-                if (k > map_storage.size() - 1)
-                {
                     continue;
                 }
-                long long h = get_factor_hash(c, input_view);
-
-                if (map_storage[k].end() != map_storage[k].find(h))
+                if (curr_left && curr_right)
                 {
-                    //if((map_storage[k])[h]>facbuf[i].position){
-                    //    std::cout<<"src: "<<(map_storage[k])[h]<<" pos: "<<facbuf[i].position<<std::endl;
-                    //    std::cout<<"src: "<<input_view.substr( (map_storage[k])[h], facbuf[i].length)<<" pos: "<< input_view.substr(facbuf[i].position,facbuf[i].length)<<std::endl;
-                    //    throw std::invalid_argument( "forward reference" );
-                    //}
-                    facbuf[i].firstoccurence = (map_storage[k])[h];
+                    //cherry
+                    //old left
+                    left.set_position(left.get_position() + size - 1);
+                    phase2_buffer.push_back(left);
+                    //old right
+                    phase2_buffer.push_back(right);
+
+                    curr_size = Chains.size();
+
+                    Chains[i + 1] = std::move(Chains.back());
+                    Chains.pop_back();
+                    Chains[i] = std::move(Chains.back());
+                    Chains.pop_back();
+                    if (curr_size <= oldsize)
+                    {
+                        i = i - 2;
+                    }
+
+                    continue;
+                }
+                if (curr_left)
+                {
+                    //only left found
+                    Chains[i].set_position(right.get_position());
+
+                    Chains[i + 1].set_position(right.get_position() + size / 2);
+                }
+                else
+                {
+                    //only rightfound
+
+                    Chains[i + 1].set_position(left.get_position() + size / 2);
                 }
             }
+            Chains.shrink_to_fit();
+        }
+
+        inline void find_next_search_groups(std::vector<Group> &groupVec, std::vector<len_compact_t> &active_index)
+        {
+            uint16_t size = groupVec.front().get_next_length()*2;
+            for (len_compact_t i = 0; i < groupVec.size(); i++)
+            {
+                if (groupVec[i].get_next_length() * 2 < size)
+                {
+                    size = groupVec[i].get_next_length() * 2;
+                    active_index.clear();
+                    active_index.push_back(i);
+                    continue;
+                }
+                if (groupVec[i].get_next_length() * 2 == size)
+                {
+                    active_index.push_back(i);
+                }
+            }
+        }
+
+        void fill_group_hashmap(std::vector<Group> &groupVec, std::unordered_map<uint64_t, len_compact_t> &hmap, std::vector<len_compact_t> &active_index, io::InputView &input_view, hash_interface *hash_provider)
+        {
+ 
+            uint16_t size = groupVec[active_index.front()].get_next_length() * 2;
+            uint64_t hash;
+            std::unordered_map<uint64_t, len_compact_t>::iterator iter;
+             std::cout << "001" << std::endl;
+            for (len_compact_t i : active_index)
+            {
+                hash = hash_provider->make_hash(groupVec[i].get_start_of_search(), size, input_view);
+                iter = hmap.find(hash);
+
+                if (iter != hmap.end())
+                {
+                    groupVec[i].absorp_next(groupVec[iter->second].get_start_of_search());
+                }
+                else
+                {
+                    hmap[hash] = i;
+                }
+            }
+        }
+
+        inline void phase2_search(uint16_t size, std::vector<Group> &groupVec, std::unordered_map<uint64_t, len_compact_t> &hmap,std::vector<lz77Aprox::Factor> &factorVec, io::InputView &input_view, hash_interface *hash_provider)
+        {
+            rolling_hash rhash = hash_provider->make_rolling_hash(0, size, input_view);
+
+            std::unordered_map<uint64_t, len_compact_t>::iterator iter;
+            len_compact_t index;
+
+            for (len_compact_t i = size; i < input_view.size(); i++)
+            {
+
+                iter = hmap.find(rhash.hashvalue);
+                if (iter != hmap.end())
+                {
+                    index = hmap[rhash.hashvalue];
+                    if (rhash.position < groupVec[index].get_start_of_search())
+                    {
+                        groupVec[index].absorp_next(rhash.position);
+                    }
+                    else{
+                        //this works for all cause thr rolling hash runs over each one
+                        factorVec.push_back(groupVec[index].advance_Group());
+                    }
+                    hmap.erase(rhash.hashvalue);
+                }
+                hash_provider->advance_rolling_hash(rhash, input_view);
+            }
+        }
+
+        inline void check_groups(uint16_t size,std::vector<Group> &groupVec, std::vector<len_compact_t> &active_index, std::vector<lz77Aprox::Factor> &factorVec)
+        {
+            // if(size==4096){
+            //     std::cout<<"number groups:"<<groupVec.size()<<std::endl;
+            // }
+            std::vector<len_compact_t> mark_delete;
+            for (len_compact_t index : active_index)
+            {
+                Group g = groupVec[index];
+                if (!g.has_next())
+                {
+                   
+                    mark_delete.push_back(index);
+                }
+            }
+            //delete all marked
+            len_compact_t index;
+            while (!mark_delete.empty())
+            {
+                index = mark_delete.back();
+                if (groupVec.size() - 1 == index)
+                {
+                    groupVec.pop_back();
+                }
+                else
+                {
+                    groupVec[index] = groupVec.back();
+                    groupVec.pop_back();
+                }
+                mark_delete.pop_back();
+            }
+                //         if(size==4096){
+                // std::cout<<"number groups:"<<groupVec.size()<<std::endl;
+                // for(Group g:groupVec){
+                //     std::cout<<"chain:"<<g.get_chain()<<std::endl;
+                // }
+            // }
+        }
+
+        void cherrys_to_groups(std::vector<lz77Aprox::Factor> &facVec,std::vector<Chain> &phase2_buffer){
+
+            Chain c;
+            // start with decreasing
+            bool inc = false;
+            while (!phase2_buffer.empty())
+            {
+                c = phase2_buffer.back();
+                if (1 == __builtin_popcount(c.get_chain()))
+                {
+                    //chain has only one factor skip phase 2
+                    factorVec.push_back(lz77Aprox::Factor(c.get_position(), c.get_position(), c.get_chain(),true));
+                   
+                    inc = !inc;
+                    phase2_buffer.pop_back();
+                    
+                    continue;
+                }
+                if (c.get_chain())
+                {
+                    //std::cout<<"counter: "<<counter<<std::endl;
+                    //chain is not null and not 1
+                    groupVec.push_back(Group(c, inc));
+                    
+                    inc = !inc;
+                    phase2_buffer.pop_back();
+                   
+                    continue;
+                }
+               
+            }
+            phase2_buffer.clear();
+        }
+
+        void chains_to_groups(std::vector<lz77Aprox::Factor> &facVec,std::vector<Chain> &groupVec){
+           
+            bool inc = false;
+             Chain c;
+            for(len_t i=0; i<curr_Chains.size();i++)
+            {
+                c = curr_Chains[i];
+
+                if (1 == __builtin_popcount(c.get_chain()))
+                {
+                    //chain has only one factor skip phase 2
+                    factorVec.push_back(lz77Aprox::Factor(c.get_position(), c.get_position(), c.get_chain(),false));
+                   
+                    inc = !inc;
+                    
+                    continue;
+                }
+                if (c.get_chain())
+                {
+                     //std::cout<<"counter2: "<<counter<<std::endl;
+                    //chain is not null
+                    groupVec.push_back(Group(c, inc));
+                    
+                    inc = !inc;
+                   
+                    continue;
+                }
+            }
+            groupVec.clear();
         }
 
     public:
@@ -387,22 +387,14 @@ namespace tdc
 
         inline virtual void compress(Input &input, Output &output) override
         {
-            io::InputView input_view = input.as_view();
-            WINDOW_SIZE=config().param("window").as_int() *2;
-            MIN_FACTOR_LENGTH= config().param("threshold").as_int();
-            //std::cout << "ws:"<<WINDOW_SIZE << std::endl;
-            //std::cout << "mfl: "<<MIN_FACTOR_LENGTH << std::endl;
-            
-            auto os = output.as_stream();
-            //choose hash here
-            hash_provider = new stackoverflow_hash();
 
-            auto map = tdc::compact_hash::map::sparse_cv_hashmap_t<int>(0, 4);
-            //make reusable containers
-            std::vector<std::unordered_map<long long, len_t>> map_storage;
-            std::unordered_map<long long, hmap_value> hmap;
-            std::vector<std::set<Cherry>::iterator> cherrylist;
-            std::unordered_map<long long, len_t> temp_store;
+            std::cout << "compact: " << sizeof(len_compact_t) << std::endl;
+            std::cout << "len_t: " << sizeof(len_t) << std::endl;
+            std::cout << "chain: " << sizeof(Chain) << std::endl;
+            io::InputView input_view = input.as_view();
+            auto os = output.as_stream();
+            len_compact_t WINDOW_SIZE = config().param("window").as_int() * 2;
+            len_compact_t MIN_FACTOR_LENGTH = config().param("threshold").as_int();
 
             //adjust window size
             while (input_view.size() - 1 < WINDOW_SIZE)
@@ -410,91 +402,113 @@ namespace tdc
                 WINDOW_SIZE = WINDOW_SIZE / 2;
             }
 
-            //init the buffer
-            populate_buffer(WINDOW_SIZE, input_view);
+            //HASH
+            hash_interface *hash_provider;
+            hash_provider = new stackoverflow_hash();
 
-            len_t ws = WINDOW_SIZE;
-            //std::cout << "ws:" << ws << ",MINFACTORLENGTH: " << MIN_FACTOR_LENGTH << std::endl;
-            len_t round = 0;
+            //bitsize of a chain
+            //len_compact_t chain_size = log2(WINDOW_SIZE) - log2(MIN_FACTOR_LENGTH) + 1;
+            //number of initianl chains
+            //len_compact_t ini_chain_num = ((input_view.size()-1) / WINDOW_SIZE)*2;
 
-            //start Phase1 loop
-            StatPhase::wrap("Factorization", [&] {
-                while (ws > MIN_FACTOR_LENGTH)
+            //make reusable containers
+            //INIT: Phase 1
+            std::vector<Chain> curr_Chains;
+
+            std::vector<Chain> phase2_buffer;
+
+            std::unordered_map<uint64_t, len_compact_t> hmap;
+
+            len_compact_t size = WINDOW_SIZE / 2;
+            len_compact_t round = 0;
+            std::cout << "0" << std::endl;
+            StatPhase::wrap("Phase1", [&] {
+                StatPhase::wrap("populate", [&] { populate_chainbuffer(curr_Chains, size, input_view); });
+                std::cout << curr_Chains[0].get_position() << std::endl;
+                while (size > MIN_FACTOR_LENGTH)
                 {
-
                     StatPhase::wrap("Round: " + std::to_string(round), [&] {
-                       // std::cout << FactorBuffer.size() << std::endl;
-                        StatPhase::log("numbers of cherrys", FactorBuffer.size());
-                        //std::cout << "0" << std::endl;
-                        StatPhase::wrap("cherrylist: ", [&] { make_active_cherry_list(cherrylist); });
-                        //std::cout << "1" << std::endl;
-                        //std::cout << "active: " << cherrylist.size() << std::endl;
-                        StatPhase::log("numbers of active cherrys", cherrylist.size());
-                        rhash = hash_provider->make_rolling_hash(0, ws / 2, input_view); //half because we test the children
-                        //std::cout << "2" << std::endl;
-                       
-                        StatPhase::wrap("make multimap: ", [&] { populate_multimap(hmap, cherrylist, input_view); });
+                        StatPhase::wrap("make hashmap", [&] { fill_chain_hashmap(hmap, curr_Chains, size, input_view, hash_provider); });
+                        std::cout << "1" << std::endl;
+                        StatPhase::wrap("search", [&] { phase1_search(hmap, curr_Chains, size, input_view, hash_provider); });
+                        std::cout << "2" << std::endl;
+                        hmap = std::unordered_map<uint64_t, len_compact_t>();
+                        StatPhase::wrap("make new chains", [&] { new_chains(curr_Chains, size, phase2_buffer); });
                         std::cout << "3" << std::endl;
-                       
-                        StatPhase::wrap("mark cherrys: ", [&] { mark_cherrys(hmap, temp_store, input_view); });
-                        std::cout << "4" << std::endl;
-                        hmap =  std::unordered_map<long long, hmap_value>();
-                       
-                        StatPhase::wrap("store map: ", [&] {map_storage.push_back(temp_store);});
-                        temp_store =  std::unordered_map<long long,len_t>();
-                        StatPhase::wrap("apply findings: ", [&] { apply_findings(cherrylist); });
-                        ws = ws / 2;
-                        cherrylist.clear();
-                        
+                        size = size / 2;
                         round++;
-                        std::cout<<"level done"<<std::endl;
                     });
+                    std::cout<<"size: "<<size<<std::endl;
                 }
             });
-            std::cout << "fac done." << std::endl;
-
-
-
-           
-            len_t il = 0;
-
-
-            std::deque<AproxFactor> facbuf;
+            std::cout << "phase1 done;" << std::endl;
+            std::vector<Group> groupVec;
+            std::vector<lz77Aprox::Factor> factorVec;
             
-            StatPhase::wrap("inflate chains: ", [&] {inflate_chains(facbuf,input_view);});
-            FactorBuffer.clear();
+             len_t counter=0;
+            StatPhase::wrap("transfer", [&] {
+            //add all cherry in phase 2 buffer to groupvec
+            cherrys_to_groups(factorVec,phase2_buffer);
             
             
-            std::cout << "inflate done. facbuf size: "<<facbuf.size() << std::endl;
-            StatPhase::wrap("insert src: ", [&] {insert_first_occ(facbuf, map_storage,input_view);});
-            map_storage.clear();
-            map_storage.shrink_to_fit();
-            std::cout << "start encode." << std::endl;
-            lzss::FactorBufferRAM factors;
-            delete hash_provider;
-            int last_pos =0;
-            il = 0;
+            std::cout << "transver half.counter: "<<counter << std::endl;
+
+            chains_to_groups();
+            counter=0;
+            //start decrasing
             
-           for(AproxFactor f:facbuf){
-                
-                    if (f.firstoccurence != f.position)
-                    {
-                        if ((f.position <= last_pos)&&(last_pos!=0))
-                        {   
-                            std::cout << "il: " << il << " last_pos: " << last_pos << "  pos: " << f.position << std::endl;
-                            throw std::invalid_argument("not sorted");
-                        }
-                        factors.push_back(f.position, f.firstoccurence, f.length);
-                        last_pos = f.position;
-                        il++;
-                        
-                    }
-                  
+            });
+            std::cout << "transver done.counter: " <<counter<< std::endl;
+            std::cout << "facsize: " <<factorVec.size()<< std::endl;
+            curr_Chains.clear();
+            curr_Chains.shrink_to_fit();
+            //Phase 2
+            std::vector<len_compact_t> active_index;
+            StatPhase::wrap("Phase2", [&] {
+            round = 0;
+            while (!groupVec.empty())
+            {
+                StatPhase::wrap("Round: " + std::to_string(round), [&] {
+                    std::cout << "0" << std::endl;
+                    StatPhase::wrap("findGroup", [&] { find_next_search_groups(groupVec, active_index); });
+                    std::cout << "01" << std::endl;
+                    StatPhase::wrap("fill hmap", [&] { fill_group_hashmap(groupVec, hmap, active_index, input_view, hash_provider); });
+                    size = groupVec[active_index.front()].get_next_length() * 2;
+                    std::cout << "02" << std::endl;
+                    StatPhase::wrap("search", [&] { phase2_search(size, groupVec, hmap,factorVec, input_view, hash_provider); });
+                    hmap = std::unordered_map<uint64_t, len_compact_t>();
+                    std::cout << "03" << std::endl;
+                    StatPhase::wrap("cheack", [&] { check_groups(size,groupVec, active_index, factorVec); });
+                    active_index.clear();
+                    groupVec.shrink_to_fit();
+                    std::cout << "04" << std::endl;
+                });
+                round++;
+                std::cout<<"size: "<<size<<std::endl;
             }
-            facbuf.shrink_to_fit();
-            std::cout<<"found facs: "<<il<<std::endl;
+            });
 
+            std::sort(factorVec.begin(),factorVec.end());
+
+            
+
+
+            lzss::FactorBufferRAM factors;
             // encode
+
+            for(lz77Aprox::Factor f :factorVec){
+                if(f.pos!=f.src){
+                    factors.push_back(lzss::Factor(f.pos,f.src,f.len));
+
+                    if(f.pos<f.src){
+                    std::cout<<"fpos: "<<f.pos<<" fsrc: "<<f.src<<"f.len: "<<f.len<<std::endl;
+                       throw std::invalid_argument( "forawrdref:" );
+                 }
+                }
+                    
+            }
+            std::cout<<"facs: "<<factorVec.size()<<std::endl;
+            std::cout<<"facfound: "<<factors.size()<<std::endl;
             StatPhase::wrap("Encode", [&] {
                 auto coder = lzss_coder_t(config().sub_config("coder")).encoder(output, lzss::UnreplacedLiterals<decltype(input_view), decltype(factors)>(input_view, factors));
 

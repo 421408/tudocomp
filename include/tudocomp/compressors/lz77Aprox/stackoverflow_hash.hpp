@@ -46,7 +46,7 @@ class stackoverflow_hash : public hash_interface{
     void advance_rolling_hash(rolling_hash &rhash,io::InputView &input_view){
         rhash.hashvalue = (((rhash.hashvalue-((input_view[rhash.position]*rhash.c0_exp)%PRIME_MOD))*PRIME_BASE)%PRIME_MOD+input_view[rhash.position+rhash.length])%PRIME_MOD;
         if(rhash.hashvalue<0){
-            rhash.hashvalue=rhash.hashvalue+1000000009;
+            rhash.hashvalue=rhash.hashvalue+PRIME_MOD;
         }
         rhash.position++;
           //if(rhash.hashvalue!=make_hash(rhash.position,rhash.length,input_view)){

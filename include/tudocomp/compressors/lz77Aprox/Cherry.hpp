@@ -2,7 +2,10 @@
 
 #include <tudocomp/def.hpp>
 #include <tudocomp/compressors/lz77Aprox/AproxFactor.hpp>
+#include <tudocomp/compressors/lz77Aprox/Chain.hpp>
 #include <vector>
+#include <utility>
+
 namespace tdc{
 
 class Cherry {
@@ -75,8 +78,18 @@ public:
 
     }
 
+    inline std::pair<Chain,Chain> split_into_chains(){
+        
+        return std::make_pair(Chain(position,length/2,3,l),Chain(position+length/2,length/2,2,l)) ;
+
+    }
+
     bool operator< (Cherry x  )const{
         return this->position< x.position;
+    }
+
+    bool operator== (Cherry x)const{
+        return this->position==x.position;
     }
 }__attribute__((__packed__));
 

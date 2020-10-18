@@ -91,7 +91,9 @@
         "ios": "cpp",
         "locale": "cpp",
         "queue": "cpp",
-        "stack": "cpp"
+        "stack": "cpp",
+        "*.ipp": "cpp",
+        "filesystem": "cpp"
     },
     "C_Cpp.errorSquiggles": "Enabled",
     "C_Cpp.loggingLevel": "Debug"

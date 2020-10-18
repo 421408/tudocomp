@@ -5,10 +5,10 @@ namespace tdc{
     class AproxFactor{
 
     public:
-        /*  0= start
-         *  1= cherry done
-         *  2= chainlink
-         *  3= chainlink optimised
+        /*  0= done
+         *  1= cherry
+         *  2= chain up
+         *  3= chain down
          *  4= 1 time optimised
          *  5= 2 time optimised
          *  6= 3 time optimised(done)
