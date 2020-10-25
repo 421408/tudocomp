@@ -8,8 +8,8 @@ namespace tdc{
     struct rolling_hash
     {
         len_t position,length;
-        int64_t hashvalue;
-        int64_t c0_exp;
+        uint64_t hashvalue;
+        uint64_t c0_exp;
     };
     
 

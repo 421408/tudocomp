@@ -11,6 +11,9 @@ namespace tdc{
         Chain(len_compact_t length,len_compact_t pos) {
             chain =0;
             positon =pos;
+             if(pos==273393){
+                std::cout<<"old pos: "<<positon<<" newpos: "<<pos <<"\n";
+            }
         }
         Chain() {
             chain =0;
@@ -23,7 +26,12 @@ namespace tdc{
             return positon;
         }
         inline void set_position(len_compact_t pos){
+             if(pos==273393){
+                std::cout<<"old pos: "<<positon<<" newpos: "<<pos <<"\n";
+            }
+            
             positon=pos;
+           
         }
 
         inline void add(len_compact_t &adder){
