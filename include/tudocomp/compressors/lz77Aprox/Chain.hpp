@@ -3,51 +3,36 @@
 #include <tudocomp/def.hpp>
 
 
-namespace tdc{
+namespace tdc {
 
- class Chain {
+    class Chain {
     public:
 
-        Chain(len_compact_t length,len_compact_t pos) {
-            chain =0;
-            positon =pos;
-             if(pos==273393){
-                std::cout<<"old pos: "<<positon<<" newpos: "<<pos <<"\n";
-            }
+        Chain(len_compact_t length, len_compact_t pos) {
+            chain = 0;
+            positon = pos;
         }
+
         Chain() {
-            chain =0;
+            chain = 0;
         }
 
         uint16_t chain;
         len_compact_t positon;
 
-        inline len_compact_t get_position(){
+        inline len_compact_t get_position() {
             return positon;
         }
-        inline void set_position(len_compact_t pos){
-             if(pos==273393){
-                std::cout<<"old pos: "<<positon<<" newpos: "<<pos <<"\n";
-            }
-            
-            positon=pos;
-           
+
+        inline void set_position(len_compact_t pos) {
+            positon = pos;
         }
 
-        inline void add(len_compact_t &adder){
-            chain=chain+adder;
-            // if(adder>4096){
-            //     std::cout<<"adder: "<<adder<<std::endl;
-            //     throw std::invalid_argument( "adder to large" );
-            // }
-            // if(chain>=8176){
-            //     std::cout<<"adder: "<<adder<<std::endl;
-            //     throw std::invalid_argument( "dickhead" );
-            // }
-            
+        inline void add(len_compact_t &adder) {
+            chain = chain + adder;
         }
 
-        inline uint16_t get_chain(){
+        inline uint16_t get_chain() {
             return chain;
         }
     }__attribute__((__packed__));
