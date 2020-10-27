@@ -33,6 +33,7 @@
 #include <tudocomp/compressors/lz77Aprox/Factor.hpp>
 #include <tudocomp/compressors/lz77Aprox/hash_interface.hpp>
 #include <tudocomp/compressors/lz77Aprox/stackoverflow_hash.hpp>
+#include <tudocomp/compressors/lz77Aprox/berenstein_hash.hpp>
 
 namespace tdc {
     template<typename lzss_coder_t>
@@ -56,6 +57,7 @@ namespace tdc {
                                 hash_interface *hash_provider) {
             hmap.reserve(curr_Chains.size());
 
+
             uint64_t hash;
             std::unordered_map<uint64_t, len_compact_t>::iterator iter;
             len_t collisions=0;
@@ -66,7 +68,7 @@ namespace tdc {
                 hash = hash_provider->make_hash(curr_Chains[i].get_position(), size, input_view);
 
                 iter = hmap.find(hash);
-                bool inserted = false;
+
 
                 if (iter == hmap.end()) {
                     hmap[hash] = i;
@@ -297,6 +299,7 @@ namespace tdc {
 
         void fill_group_hashmap(std::vector <Group> &groupVec,
                                 std::unordered_map <uint64_t, len_compact_t> &hmap,
+                                std::vector <lz77Aprox::Factor> &factorVec,
                                 std::vector <len_compact_t> &active_index, io::InputView &input_view,
                                 hash_interface *hash_provider) {
 
@@ -307,64 +310,70 @@ namespace tdc {
 
             for (len_compact_t i : active_index) {
                 len_t k = groupVec[i].get_start_of_search();
+                if (k + size < input_view.size()) {
+                    hash = hash_provider->make_hash(k, size, input_view);
 
-                hash = hash_provider->make_hash(k, size, input_view);
+                    iter = hmap.find(hash);
 
-                iter = hmap.find(hash);
-
-                if (iter == hmap.end()) {
-                    hmap[hash] = i;
-                } else {
-                    //POSSIBLE COLLISION
-
-                    if (input_view.substr(groupVec[i].get_start_of_search(), size) ==
-                        input_view.substr(groupVec[iter->second].get_start_of_search(), size)) {
-                        //NO COLLISION
-                        len_t old = groupVec[iter->second].get_start_of_search();
-
-                        if (k < old) {
-
-                            groupVec[iter->second].absorp_next(k);
-                            hmap[hash] = i;
-                        } else {
-                            groupVec[i].absorp_next(old);
-                        }
+                    if (iter == hmap.end()) {
+                        hmap[hash] = i;
                     } else {
-                        //COLLISION
-                        bool inserted = false;
-                        len_t offset = 1;
-                        while (!inserted) {
-                            iter = hmap.find(hash + offset);
-                            if (iter == hmap.end()) {
-                                //this bucket is empty
-                                hmap[hash + offset] = i;
-                                inserted = true;
-                               collisions++;
+                        //POSSIBLE COLLISION
+
+                        if (input_view.substr(groupVec[i].get_start_of_search(), size) ==
+                            input_view.substr(groupVec[iter->second].get_start_of_search(), size)) {
+                            //NO COLLISION
+                            len_t old = groupVec[iter->second].get_start_of_search();
+
+                            if (k < old) {
+
+                                groupVec[iter->second].absorp_next(k);
+                                hmap[hash] = i;
                             } else {
-                                //next bucket is not empty
-                                if (input_view.substr(groupVec[iter->second].get_start_of_search(), size) ==
-                                    input_view.substr(groupVec[i].get_start_of_search(), size)) {
-                                    //strings match
-                                    //no collision
-                                    if (groupVec[i].get_start_of_search() <
-                                        groupVec[iter->second].get_start_of_search()) {
-
-                                        groupVec[iter->second].absorp_next(groupVec[i].get_start_of_search());
-                                        hmap[hash] = i;
-                                    } else {
-                                        groupVec[i].absorp_next(groupVec[iter->second].get_start_of_search());
-                                    }
-                                    inserted = true;
-                                   collisions++;
-                                }
+                                groupVec[i].absorp_next(old);
                             }
-                            offset++;
-                        }
+                        } else {
+                            //COLLISION
+                            bool inserted = false;
+                            len_t offset = 1;
+                            while (!inserted) {
+                                iter = hmap.find(hash + offset);
+                                if (iter == hmap.end()) {
+                                    //this bucket is empty
+                                    hmap[hash + offset] = i;
+                                    inserted = true;
+                                    collisions++;
+                                } else {
+                                    //next bucket is not empty
+                                    if (input_view.substr(groupVec[iter->second].get_start_of_search(), size) ==
+                                        input_view.substr(groupVec[i].get_start_of_search(), size)) {
+                                        //strings match
+                                        //no collision
+                                        if (groupVec[i].get_start_of_search() <
+                                            groupVec[iter->second].get_start_of_search()) {
 
+                                            groupVec[iter->second].absorp_next(groupVec[i].get_start_of_search());
+                                            hmap[hash] = i;
+                                        } else {
+                                            groupVec[i].absorp_next(groupVec[iter->second].get_start_of_search());
+                                        }
+                                        inserted = true;
+                                        collisions++;
+                                    }
+                                }
+                                offset++;
+                            }
+
+                        }
                     }
                 }
+                else{
+                    //reaches beyond
+                    factorVec.push_back(groupVec[i].advance_Group());
+                }
+
             }
-            std::cout << "collisions" << collisions << "\n";
+            std::cout << "collisions: " << collisions << "\n";
         }
 
         inline void
@@ -570,6 +579,7 @@ namespace tdc {
             auto os = output.as_stream();
             len_compact_t WINDOW_SIZE = config().param("window").as_int() * 2;
             len_compact_t MIN_FACTOR_LENGTH = config().param("threshold").as_int();
+            std::cout<<"size: "<<input_view.size()<<"\n";
 
             //adjust window size
             while (input_view.size() - 1 < WINDOW_SIZE * 2) {
@@ -578,7 +588,8 @@ namespace tdc {
 
             //HASH
             hash_interface *hash_provider;
-            hash_provider = new stackoverflow_hash();
+            //hash_provider = new stackoverflow_hash();
+            hash_provider = new berenstein_hash();
 
             //bitsize of a chain
             //len_compact_t chain_size = log2(WINDOW_SIZE) - log2(MIN_FACTOR_LENGTH) + 1;
@@ -639,7 +650,7 @@ namespace tdc {
                 }
             });
 
-            //std::cout << "phase1 done;" << std::endl;
+            std::cout << "phase1 done;" << std::endl;
             std::vector <Group> groupVec;
             std::vector <lz77Aprox::Factor> factorVec;
 
@@ -670,13 +681,14 @@ namespace tdc {
                     // }
 
                     StatPhase::wrap("Round: " + std::to_string(round), [&] {
-                        //std::cout << "0" << std::endl;
+                        std::cout << "0" << std::endl;
                         StatPhase::wrap("findGroup", [&] { find_next_search_groups(groupVec, active_index); });
-                        //std::cout << "01" << std::endl;
+                        std::cout << "1" << std::endl;
                         StatPhase::wrap("fill hmap", [&] {
-                            fill_group_hashmap(groupVec, hmap, active_index, input_view, hash_provider);
+                            fill_group_hashmap(groupVec, hmap, factorVec, active_index, input_view, hash_provider);
                         });
                         size = groupVec[active_index.front()].get_next_length() * 2;
+                        std::cout << "searchsize: "<< groupVec[active_index.front()].get_next_length() * 2 << std::endl;
                         //std::cout << "02" << std::endl;
                         StatPhase::wrap("search", [&] {
                             phase2_search(size, groupVec, hmap, factorVec, input_view, hash_provider);
