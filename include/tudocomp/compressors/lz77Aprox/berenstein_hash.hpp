@@ -61,7 +61,7 @@ namespace tdc{
             rhash.hashvalue = modulo(d+input_view[rhash.position+rhash.length]);
 
             //rhash.hashvalue = modulo(modulo(modulo(hash_minus_first<<5)+hash_minus_first)  +input_view[rhash.position+rhash.length]);
-            
+
             rhash.position++;
             /*
              if(rhash.hashvalue!=make_hash(rhash.position,rhash.length,input_view)){
