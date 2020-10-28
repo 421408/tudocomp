@@ -12,7 +12,7 @@ namespace tdc{
 
     public:
 
-        stackoverflow_hash():PRIME_BASE((1ULL<<15)-19),PRIME_MOD((1ULL<<31)-1){}
+        stackoverflow_hash():PRIME_BASE((1ULL<<15)-19),PRIME_MOD((1ULL<<61)-1){}
 
         stackoverflow_hash(uint64_t pb,uint64_t pm):PRIME_BASE(pb),PRIME_MOD(pm){}
 
@@ -49,7 +49,7 @@ namespace tdc{
                 rhash.hashvalue=rhash.hashvalue+PRIME_MOD;
             }
             rhash.position++;
-            /* if(rhash.hashvalue!=make_hash(rhash.position,rhash.length,input_view)){
+             /*if(rhash.hashvalue!=make_hash(rhash.position,rhash.length,input_view)){
                 std::cout<<input_view.substr(rhash.position,rhash.length)<<std::endl;
               std::cout<<"rhash: "<<rhash.hashvalue<<" ,mhash: "<<make_hash(rhash.position,rhash.length,input_view)<<std::endl;
                std::cout<<"exp: "<<rhash.c0_exp*input_view[rhash.position-1]<<std::endl;

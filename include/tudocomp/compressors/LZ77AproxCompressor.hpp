@@ -116,8 +116,9 @@ namespace tdc {
 
                                     }
                                     inserted = true;
-                                    collisions++;
+
                                 }
+                                collisions++;
                             }
                             offset++;
                         }
@@ -336,13 +337,14 @@ namespace tdc {
                             //COLLISION
                             bool inserted = false;
                             len_t offset = 1;
+                            collisions++;
                             while (!inserted) {
                                 iter = hmap.find(hash + offset);
                                 if (iter == hmap.end()) {
                                     //this bucket is empty
                                     hmap[hash + offset] = i;
                                     inserted = true;
-                                    collisions++;
+
                                 } else {
                                     //next bucket is not empty
                                     if (input_view.substr(groupVec[iter->second].get_start_of_search(), size) ==
@@ -358,8 +360,9 @@ namespace tdc {
                                             groupVec[i].absorp_next(groupVec[iter->second].get_start_of_search());
                                         }
                                         inserted = true;
-                                        collisions++;
+
                                     }
+                                    collisions++;
                                 }
                                 offset++;
                             }
@@ -588,8 +591,10 @@ namespace tdc {
 
             //HASH
             hash_interface *hash_provider;
-            //hash_provider = new stackoverflow_hash();
-            hash_provider = new berenstein_hash();
+            hash_provider = new stackoverflow_hash();
+            //hash_provider = new berenstein_hash();
+
+
 
             //bitsize of a chain
             //len_compact_t chain_size = log2(WINDOW_SIZE) - log2(MIN_FACTOR_LENGTH) + 1;
