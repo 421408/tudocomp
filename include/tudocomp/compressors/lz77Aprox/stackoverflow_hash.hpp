@@ -8,11 +8,11 @@ namespace tdc{
 
     private:
         const unsigned PRIME_BASE;
-        const unsigned PRIME_MOD;
+        const int64_t PRIME_MOD;
 
     public:
 
-        stackoverflow_hash():PRIME_BASE((1ULL<<15)-19),PRIME_MOD((1ULL<<61)-1){}
+        stackoverflow_hash():PRIME_BASE(257),PRIME_MOD((1ULL<<54)-33){}
 
         stackoverflow_hash(uint64_t pb,uint64_t pm):PRIME_BASE(pb),PRIME_MOD(pm){}
 
@@ -44,12 +44,19 @@ namespace tdc{
         }
 
         void advance_rolling_hash(rolling_hash &rhash,io::InputView &input_view){
-            rhash.hashvalue = (((rhash.hashvalue-((input_view[rhash.position]*rhash.c0_exp)%PRIME_MOD))*PRIME_BASE)%PRIME_MOD+input_view[rhash.position+rhash.length])%PRIME_MOD;
+            int64_t oldhash = rhash.hashvalue;
+            int64_t first= (input_view[rhash.position]*rhash.c0_exp)%PRIME_MOD;
+            int64_t old_minus = (oldhash - first)%PRIME_MOD;
+            int64_t d = (old_minus*PRIME_BASE)%PRIME_MOD;
+            int64_t e = (d+input_view[rhash.position+rhash.length])%PRIME_MOD;
+            rhash.hashvalue =e;
+            //rhash.hashvalue = (((rhash.hashvalue-((input_view[rhash.position]*rhash.c0_exp)%PRIME_MOD))*PRIME_BASE)%PRIME_MOD+input_view[rhash.position+rhash.length])%PRIME_MOD;
             if(rhash.hashvalue<0){
                 rhash.hashvalue=rhash.hashvalue+PRIME_MOD;
             }
             rhash.position++;
-             /*if(rhash.hashvalue!=make_hash(rhash.position,rhash.length,input_view)){
+            /*
+             if(rhash.hashvalue!=make_hash(rhash.position,rhash.length,input_view)){
                 std::cout<<input_view.substr(rhash.position,rhash.length)<<std::endl;
               std::cout<<"rhash: "<<rhash.hashvalue<<" ,mhash: "<<make_hash(rhash.position,rhash.length,input_view)<<std::endl;
                std::cout<<"exp: "<<rhash.c0_exp*input_view[rhash.position-1]<<std::endl;
@@ -60,7 +67,8 @@ namespace tdc{
 
               throw std::invalid_argument( "doesnt match hash" );
             }
-            */
+             */
+
 
       }
 

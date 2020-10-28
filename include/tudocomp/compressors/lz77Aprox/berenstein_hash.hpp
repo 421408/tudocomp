@@ -51,18 +51,16 @@ namespace tdc{
 
         void advance_rolling_hash(rolling_hash &rhash,io::InputView &input_view){
 
-            int64_t oldhash=rhash.hashvalue;
-            int64_t hash_minus_first = modulo(oldhash-modulo(input_view[rhash.position]*rhash.c0_exp));
-            int64_t hash_minus_first_t = (oldhash-((input_view[rhash.position]*rhash.c0_exp)%PRIME_MOD))%PRIME_MOD;
-            uint64_t fchar = input_view[rhash.position]*rhash.c0_exp;
+            uint64_t oldhash=rhash.hashvalue;
+
             uint64_t first = modulo(input_view[rhash.position]*rhash.c0_exp);
-            uint64_t fcharmod = (input_view[rhash.position]*rhash.c0_exp)%PRIME_MOD;
+
             uint64_t old_minus = modulo(oldhash-first);
             uint64_t c = modulo(old_minus<<5);
             uint64_t d = modulo(c+old_minus);
-            uint64_t e = modulo(d+input_view[rhash.position+rhash.length]);
+            rhash.hashvalue = modulo(d+input_view[rhash.position+rhash.length]);
 
-            rhash.hashvalue = modulo(modulo(modulo(hash_minus_first<<5)+hash_minus_first)  +input_view[rhash.position+rhash.length]);
+            //rhash.hashvalue = modulo(modulo(modulo(hash_minus_first<<5)+hash_minus_first)  +input_view[rhash.position+rhash.length]);
 
 
 
@@ -73,7 +71,7 @@ namespace tdc{
                 std::cout<<"rhash: "<<rhash.hashvalue<<" ,mhash: "<<make_hash(rhash.position,rhash.length,input_view)<<std::endl;
             }
             rhash.position++;
-
+            /*
              if(rhash.hashvalue!=make_hash(rhash.position,rhash.length,input_view)){
                 long long hash =0;
                  for (size_t i = 0; i < rhash.length; i++){
@@ -94,7 +92,7 @@ namespace tdc{
 
               throw std::invalid_argument( "doesnt match hash bern" );
             }
-
+            */
 
         }
 
