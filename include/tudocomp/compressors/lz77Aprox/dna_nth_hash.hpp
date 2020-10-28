@@ -8,6 +8,8 @@ namespace tdc {
     class dna_nth_hash : public hash_interface {
 
     //https://doi.org/10.1093/bioinformatics/btw397
+    //explain:
+    //https://bioinformatics.stackexchange.com/questions/19/are-there-any-rolling-hash-functions-that-can-hash-a-dna-sequence-and-its-revers
     public:
 
         dna_nth_hash() {}
@@ -72,7 +74,7 @@ namespace tdc {
                               shift(input_view[rhash.position + rhash.length]);
 
             rhash.position++;
-
+            /*
              if(rhash.hashvalue!=make_hash(rhash.position,rhash.length,input_view)){
                 std::cout<<input_view.substr(rhash.position,rhash.length)<<std::endl;
               std::cout<<"rhash: "<<rhash.hashvalue<<" ,mhash: "<<make_hash(rhash.position,rhash.length,input_view)<<std::endl;
@@ -83,7 +85,7 @@ namespace tdc {
 
               throw std::invalid_argument( "doesnt match hash" );
             }
-
+            */
 
 
         }

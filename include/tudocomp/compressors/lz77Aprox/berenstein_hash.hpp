@@ -61,15 +61,7 @@ namespace tdc{
             rhash.hashvalue = modulo(d+input_view[rhash.position+rhash.length]);
 
             //rhash.hashvalue = modulo(modulo(modulo(hash_minus_first<<5)+hash_minus_first)  +input_view[rhash.position+rhash.length]);
-
-
-
-
-            if(rhash.hashvalue<0){
-                std::cout<<"rhash: "<<rhash.hashvalue<<" ,mhash: "<<make_hash(rhash.position,rhash.length,input_view)<<std::endl;
-                rhash.hashvalue=rhash.hashvalue+PRIME_MOD;
-                std::cout<<"rhash: "<<rhash.hashvalue<<" ,mhash: "<<make_hash(rhash.position,rhash.length,input_view)<<std::endl;
-            }
+            
             rhash.position++;
             /*
              if(rhash.hashvalue!=make_hash(rhash.position,rhash.length,input_view)){
