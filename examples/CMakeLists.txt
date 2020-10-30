@@ -12,7 +12,7 @@ add_executable(
     coder_stats_example
 
     coder_stats.cpp
-)
+        ../include/tudocomp/compressors/lz77Aprox/berenstein_hash.hpp ../include/tudocomp/compressors/lz77Aprox/dna_nth_hash.hpp)
 
 target_link_libraries(
     coder_stats_example

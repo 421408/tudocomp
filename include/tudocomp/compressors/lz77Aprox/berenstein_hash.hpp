@@ -20,7 +20,7 @@ namespace tdc{
         ~berenstein_hash(){};
 
 
-        long long make_hash(len_t start, len_t size,io::InputView &input_view){
+        uint64_t make_hash(len_t start, len_t size,io::InputView &input_view){
 
 
             long long hash =0;

@@ -12,7 +12,7 @@ namespace tdc
     public:
         Group(Chain c, bool inc,uint16_t last_size_checked)
         {
-
+            tookpartinlast =false;
             position = c.get_position();
              length = 1 << (__builtin_ctz(c.get_chain()));
 
@@ -41,7 +41,10 @@ namespace tdc
 
 
 
-           
+            if (position==140120943){
+
+                std::cout<<"tada\n";
+            }
             
             first = true;
 
@@ -53,6 +56,7 @@ namespace tdc
         uint16_t length;
         bool increasing;
         bool first;
+        bool tookpartinlast;
 
         
         inline len_compact_t get_position()
@@ -80,11 +84,18 @@ namespace tdc
 
         inline uint16_t get_next_length()
         {
+            if (chain==0){
+
+                std::cout<<"tada\n";
+            }
             return 1 << (__builtin_ctz(chain));
         }
         inline len_t get_start_of_search()
         {
+            if (chain==0){
 
+                std::cout<<"   ";
+            }
             
             if (increasing)
             {
@@ -98,12 +109,26 @@ namespace tdc
 
         inline bool has_next()
         {
+            if (position==140120943){
+
+                std::cout<<"  ";
+            }
             return chain;
         }
 
         inline void absorp_next(len_t src)
         {
+            if (position==140120943){
+                std::cout<<" ";
+            }
+            if (chain==0){
 
+                std::cout<<"  ";
+            }
+            if (position==172574063){
+
+                std::cout<<" ";
+            }
             len_t size = 1 << (__builtin_ctz(chain));
             chain = chain - size;
 
@@ -116,6 +141,14 @@ namespace tdc
             }
 
             length = length + size;
+            if (position==140120943){
+
+                std::cout<<"  ";
+            }
+            if (position==172574063){
+
+                std::cout<<" ";
+            }
 
         }
 
@@ -127,8 +160,19 @@ namespace tdc
             len_t old_src_position = src_position;
             len_t old_length = length;
 
+            if (chain==0){
 
+                std::cout<<"  ";
+            }
+            if (position==172574063){
 
+                std::cout<<" ";
+            }
+
+            if (position==73738351){
+
+                std::cout<<"  ";
+            }
 
             len_t size = 1 << (__builtin_ctz(chain));
 
@@ -158,6 +202,10 @@ namespace tdc
                 chain = chain - size;
                 length = size;
                 src_position = position-length+1;
+                if (position==172574063){
+
+                    std::cout<<" ";
+                }
 
                 if (first)
                 {
