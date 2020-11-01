@@ -19,7 +19,7 @@ namespace tdc{
         ~stackoverflow_hash(){};
 
 
-        uint64_t make_hash(len_t start, len_t size,io::InputView &input_view){
+        inline uint64_t make_hash(len_t start, len_t size,io::InputView &input_view){
 
 
             long long hash =0;
@@ -30,7 +30,7 @@ namespace tdc{
             return hash;
         }
 
-        rolling_hash make_rolling_hash(len_t start, len_t size,io::InputView &input_view){
+        inline rolling_hash make_rolling_hash(len_t start, len_t size,io::InputView &input_view){
             rolling_hash rhash;
             rhash.length=size;
             rhash.position=start;
@@ -43,17 +43,18 @@ namespace tdc{
             return rhash;
         }
 
-        void advance_rolling_hash(rolling_hash &rhash,io::InputView &input_view){
+        inline void advance_rolling_hash(rolling_hash &rhash,io::InputView &input_view){
             int64_t oldhash = rhash.hashvalue;
             int64_t first= (input_view[rhash.position]*rhash.c0_exp)%PRIME_MOD;
             int64_t old_minus = (oldhash - first)%PRIME_MOD;
             int64_t d = (old_minus*PRIME_BASE)%PRIME_MOD;
             int64_t e = (d+input_view[rhash.position+rhash.length])%PRIME_MOD;
+            if(e<0){
+                e=e+PRIME_MOD;
+            }
             rhash.hashvalue =e;
             //rhash.hashvalue = (((rhash.hashvalue-((input_view[rhash.position]*rhash.c0_exp)%PRIME_MOD))*PRIME_BASE)%PRIME_MOD+input_view[rhash.position+rhash.length])%PRIME_MOD;
-            if(rhash.hashvalue<0){
-                rhash.hashvalue=rhash.hashvalue+PRIME_MOD;
-            }
+
             rhash.position++;
             /*
              if(rhash.hashvalue!=make_hash(rhash.position,rhash.length,input_view)){

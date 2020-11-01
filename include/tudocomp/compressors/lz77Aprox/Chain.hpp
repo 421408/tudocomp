@@ -11,6 +11,7 @@ namespace tdc {
         Chain(len_compact_t length, len_compact_t pos) {
             chain = 0;
             positon = pos;
+
         }
 
         Chain() {
@@ -26,9 +27,11 @@ namespace tdc {
 
         inline void set_position(len_compact_t pos) {
             positon = pos;
+
         }
 
         inline void add(len_compact_t &adder) {
+
             chain = chain + adder;
         }
 

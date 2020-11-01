@@ -42,10 +42,10 @@ namespace tdc {
 
     private:
         //fills the given chain container with the right a mount of chains
-        void populate_chainbuffer(std::vector <Chain> &curr_Chains, len_compact_t size, io::InputView &input_view) {
+        inline void populate_chainbuffer(std::vector <Chain> &curr_Chains, len_compact_t size, io::InputView &input_view) {
 
             for (len_compact_t i = 0; i < input_view.size() - 1 - size * 2; i = i + size * 2) {
-                //std::cout<<"i: "<<i<<std::endl;
+
                 curr_Chains.push_back(Chain(64, i));
                 curr_Chains.push_back(Chain(64, i + size));
 
@@ -53,15 +53,15 @@ namespace tdc {
         }
 
 
-        void fill_chain_hashmap(std::unordered_map <uint64_t, len_compact_t> &hmap,std::unordered_map <uint64_t, len_compact_t> &hmap_storage,
+        inline void fill_chain_hashmap(std::unordered_map <uint64_t, len_compact_t> &hmap,std::unordered_map <uint64_t, len_compact_t> &hmap_storage,
                                 std::vector <Chain> &curr_Chains, len_compact_t size, io::InputView &input_view,
-                                hash_interface *hash_provider) {
+                                hash_interface *hash_provider,bool &collisions) {
             hmap.reserve(curr_Chains.size());
 
 
             uint64_t hash;
             std::unordered_map<uint64_t, len_compact_t>::iterator iter;
-            len_t collisions = 0;
+
 
 
             for (len_compact_t i = 0; i < curr_Chains.size(); i++) {
@@ -94,7 +94,7 @@ namespace tdc {
                         }
                     } else {
                         //COLLISION
-                        collisions++;
+                        collisions=true;
                         bool inserted = false;
                         len_t offset = 1;
                         while (!inserted) {
@@ -103,7 +103,7 @@ namespace tdc {
                                 //this bucket is empty
                                 hmap[hash + offset] = i;
                                 inserted = true;
-                                collisions++;
+
                             } else {
                                 //next buvket is not empty
                                 if (input_view.substr(curr_Chains[iter->second].get_position(), size) ==
@@ -125,7 +125,7 @@ namespace tdc {
                                     inserted = true;
 
                                 }
-                                collisions++;
+
                             }
                             offset++;
                         }
@@ -133,10 +133,10 @@ namespace tdc {
                 }
 
             }
-            std::cout << "collisions: " << collisions << "\n";
+
         }
 
-        void insert_into_storage(std::unordered_map <uint64_t, len_compact_t> &hmap, int64_t hash, len_t pos,
+        inline  void insert_into_storage(std::unordered_map <uint64_t, len_compact_t> &hmap, int64_t hash, len_t pos,
                                  len_compact_t size, io::InputView &input_view) {
             bool inserted = false;
             len_t offset = 0;
@@ -159,74 +159,125 @@ namespace tdc {
             }
         }
 
-        void phase1_search(std::unordered_map <uint64_t, len_compact_t> &hmap,
+        inline void phase1_search(std::unordered_map <uint64_t, len_compact_t> &hmap,
                            std::vector <Chain> &curr_Chains,
                            len_compact_t size, io::InputView &input_view, hash_interface *hash_provider,
-                           std::unordered_map <uint64_t, len_compact_t> &hmap_storage) {
+                           std::unordered_map <uint64_t, len_compact_t> &hmap_storage, bool &coll) {
 
             rolling_hash rhash = hash_provider->make_rolling_hash(0, size, input_view);
             len_compact_t index;
-            std::cout << "sizep1s: " << size << std::endl;
+
             std::unordered_map<uint64_t, len_compact_t>::iterator iter;
             int last = 0;
             len_t collisions = 0;
+            if(coll){
+                for (len_compact_t i = size; i < input_view.size(); i++) {
+
+                    iter = hmap.find(rhash.hashvalue);
+                    last++;
+
+                    if (iter != hmap.end()) {
+                        index = hmap[rhash.hashvalue];
+                        if (input_view.substr(curr_Chains[index].get_position(), size) ==
+                            input_view.substr(rhash.position, size)) {
+                            //NO COLLISION
+
+                            if (rhash.position < curr_Chains[index].get_position()) {
+                                curr_Chains[index].add(size);
+                                insert_into_storage(hmap_storage, rhash.hashvalue, rhash.position,size,input_view);
+                            }
+                            if(hmap.find(rhash.hashvalue+1)!=hmap.end()){
+                                len_t offset = 1;
+                                len_t dex = hmap[rhash.hashvalue+offset];
+                                len_t ss = curr_Chains[dex].positon;
+                                if(rhash.hashvalue==hash_provider->make_hash(ss,size,input_view)){
+                                    bool empty_found=false;
+                                    while (!empty_found){
+                                        if(hmap.find(rhash.hashvalue+offset)!=hmap.end()){
+                                            //check if hash match
+                                            dex = hmap[rhash.hashvalue+offset];
+                                            ss = curr_Chains[dex].positon;
+                                            if(rhash.hashvalue==hash_provider->make_hash(ss,size,input_view)){
+                                                hmap[rhash.hashvalue+offset-1]=dex;
+                                                hmap.erase(rhash.hashvalue+offset);
+                                            }
+                                        }else{
+                                            empty_found=true;
+                                        }
+                                        offset++;
+                                    }
+                                }
+                                else{
+                                    hmap.erase(rhash.hashvalue);
+                                }
+                            } else{
+                                hmap.erase(rhash.hashvalue);
+                            }
 
 
-            for (len_compact_t i = size; i < input_view.size(); i++) {
+                        } else {
+                            //COLLISION
+                            collisions++;
+                            len_t offset = 1;
+                            bool mt_or_right_found = false;
+                            while (!mt_or_right_found) {
+                                iter = hmap.find(rhash.hashvalue + offset);
+                                if (iter != hmap.end()) {
+                                    if (input_view.substr(curr_Chains[index].get_position(), size) ==
+                                        input_view.substr(rhash.position, size)) {
+                                        //STRING MATCHES
+                                        if (rhash.position < curr_Chains[index].get_position()) {
+                                            curr_Chains[index].add(size);
 
-                iter = hmap.find(rhash.hashvalue);
-                last++;
+                                        }
 
-                if (iter != hmap.end()) {
-                    index = hmap[rhash.hashvalue];
-                    if (input_view.substr(curr_Chains[index].get_position(), size) ==
-                        input_view.substr(rhash.position, size)) {
-                        //NO COLLISION
-
-                        if (rhash.position < curr_Chains[index].get_position()) {
-                            curr_Chains[index].add(size);
-                            insert_into_storage(hmap_storage, rhash.hashvalue, rhash.position,size,input_view);
-                        }
-                        //do this to have src for duplicates in hmapfill
-                        hmap.erase(rhash.hashvalue);
-                    } else {
-                        //COLLISION
-                        collisions++;
-                        len_t offset = 1;
-                        bool mt_or_right_found = false;
-                        while (!mt_or_right_found) {
-                            iter = hmap.find(rhash.hashvalue + offset);
-                            if (iter != hmap.end()) {
-                                if (input_view.substr(curr_Chains[index].get_position(), size) ==
-                                    input_view.substr(rhash.position, size)) {
-                                    //STRING MATCHES
-                                    if (rhash.position < curr_Chains[index].get_position()) {
-                                        curr_Chains[index].add(size);
+                                        //do this to have src for duplicates in hmapfill
+                                        insert_into_storage(hmap_storage, rhash.hashvalue + offset, rhash.position,size,input_view);
+                                        hmap.erase(rhash.hashvalue + offset);
+                                        mt_or_right_found = true;
 
                                     }
-
-                                    //do this to have src for duplicates in hmapfill
-                                    insert_into_storage(hmap_storage, rhash.hashvalue + offset, rhash.position,size,input_view);
-                                    hmap.erase(rhash.hashvalue + offset);
+                                } else {
+                                    //empty bucket
                                     mt_or_right_found = true;
-
                                 }
-                            } else {
-                                //empty bucket
-                                mt_or_right_found = true;
+                                offset++;
                             }
-                            offset++;
                         }
                     }
-                }
 
-                hash_provider->advance_rolling_hash(rhash, input_view);
+                    hash_provider->advance_rolling_hash(rhash, input_view);
+                }
             }
-            std::cout << "search done p1 last: " << last << std::endl;
-            std::cout << "collisions: " << collisions << std::endl;
+            else{
+                for (len_compact_t i = size; i < input_view.size(); i++) {
+                    if(rhash.hashvalue==7912804102649040){
+                        std::cout<<"here\n";
+                    }
+                    iter = hmap.find(rhash.hashvalue);
+                    if (iter != hmap.end()) {
+                        index = hmap[rhash.hashvalue];
+                        if (input_view.substr(curr_Chains[index].get_position(), size) ==
+                            input_view.substr(rhash.position, size)) {
+                            //TRUE MATCH
+                            if (rhash.position < curr_Chains[index].get_position()) {
+                                curr_Chains[index].add(size);
+                                insert_into_storage(hmap_storage, rhash.hashvalue, rhash.position,size,input_view);
+                            }
+                            hmap.erase(rhash.hashvalue);
+                        }
+                    }
+
+
+                    hash_provider->advance_rolling_hash(rhash, input_view);
+                }
+            }
+
+
+
         }
 
-        void new_chains(std::vector <Chain> &Chains, len_compact_t size, std::vector <Chain> &phase2_buffer) {
+        inline void new_chains(std::vector <Chain> &Chains, len_compact_t size, std::vector <Chain> &phase2_buffer) {
 
             Chain left;
             bool curr_left;
@@ -274,6 +325,7 @@ namespace tdc {
                     Chains.pop_back();
                     if (curr_size <= oldsize) {
                         i = i - 2;
+                        oldsize=oldsize-2;
                     }
 
                     continue;
@@ -296,15 +348,13 @@ namespace tdc {
 
         inline void find_next_search_groups(std::vector <Group> &groupVec, std::vector <len_compact_t> &active_index) {
             uint16_t size = groupVec.front().get_next_length() * 2;
-            std::cout<<"start size: "<<size<<"\n";
+
             for (len_compact_t i = 0; i < groupVec.size(); i++) {
-                groupVec[i].tookpartinlast=false;
-                if(groupVec[i].position ==73738351){
-                    std::cout<<"hey\n";
-                }
+
+
                 if (groupVec[i].get_next_length() * 2 < size) {
                     size = groupVec[i].get_next_length() * 2;
-                    std::cout<<"new size: "<<size<<"\n";
+
                     active_index.clear();
                     active_index.push_back(i);
                     continue;
@@ -317,25 +367,20 @@ namespace tdc {
 
         }
 
-        void fill_group_hashmap(std::vector <Group> &groupVec,
+        inline void fill_group_hashmap(std::vector <Group> &groupVec,
                                 std::unordered_map <uint64_t, len_compact_t> &hmap,
                                 std::vector <lz77Aprox::Factor> &factorVec,
                                 std::vector <len_compact_t> &active_index, io::InputView &input_view,
-                                hash_interface *hash_provider) {
+                                hash_interface *hash_provider,bool &collisions) {
 
             uint16_t size = groupVec[active_index.front()].get_next_length() * 2;
             uint64_t hash;
             std::unordered_map<uint64_t, len_compact_t>::iterator iter;
-            len_t collisions = 0;
+
 
             for (len_compact_t i : active_index) {
                 len_t k = groupVec[i].get_start_of_search();
-                if(i==17079||i==25100){
-                    std::cout<<"hey\n";
-                }
-                if(groupVec[i].position ==73738351){
-                    std::cout<<"hey\n";
-                }
+
                 if (k + size < input_view.size()) {
                     hash = hash_provider->make_hash(k, size, input_view);
 
@@ -356,16 +401,16 @@ namespace tdc {
 
                                 groupVec[iter->second].absorp_next(k);
                                 hmap[hash] = i;
-                                groupVec[iter->second].tookpartinlast=true;
+
                             } else {
                                 groupVec[i].absorp_next(old);
-                                groupVec[i].tookpartinlast=true;
+
                             }
                         } else {
                             //COLLISION
                             bool inserted = false;
                             len_t offset = 1;
-                            collisions++;
+                            collisions=true;
                             while (!inserted) {
                                 iter = hmap.find(hash + offset);
                                 if (iter == hmap.end()) {
@@ -390,7 +435,7 @@ namespace tdc {
                                         inserted = true;
 
                                     }
-                                    collisions++;
+
                                 }
                                 offset++;
                             }
@@ -401,144 +446,156 @@ namespace tdc {
                 } else {
                     //reaches beyond
                     factorVec.push_back(groupVec[i].advance_Group());
-                    groupVec[i].tookpartinlast=true;
+
                 }
 
             }
-            std::cout << "collisions: " << collisions << "\n";
+
         }
 
         inline void
         phase2_search(uint16_t size, std::vector <Group> &groupVec, std::unordered_map <uint64_t, len_compact_t> &hmap,
 
                       std::vector <lz77Aprox::Factor> &factorVec, io::InputView &input_view,
-                      hash_interface *hash_provider) {
+                      hash_interface *hash_provider, bool &coll) {
             rolling_hash rhash = hash_provider->make_rolling_hash(0, size, input_view);
 
             std::unordered_map<uint64_t, len_compact_t>::iterator iter;
             len_compact_t index;
 
+            if(coll){
+                for (len_compact_t i = size; i < input_view.size(); i++) {
 
-            for (len_compact_t i = size; i < input_view.size(); i++) {
-
-                iter = hmap.find(rhash.hashvalue);
-                if(rhash.hashvalue==3094591011761984089){
-                    std::cout<<"here\n";
-                    std::cout<<"here\n";
-                }
+                    iter = hmap.find(rhash.hashvalue);
 
 
-                if (iter != hmap.end()) {
-                    index = hmap[rhash.hashvalue];
-                    if (input_view.substr(groupVec[index].get_start_of_search(), size) ==
-                        input_view.substr(rhash.position, size)) {
-                        //NO COLLISSION
-                        if (rhash.position < groupVec[index].get_start_of_search()) {
-                            groupVec[index].absorp_next(rhash.position);
 
-                        } else {
-                            //this works for all cause thr rolling hash runs over each one
-                            factorVec.push_back(groupVec[index].advance_Group());
-                        }
-                        if(hmap.find(rhash.hashvalue+1)!=hmap.end()){
-                            len_t offset = 1;
-                            len_t dex = hmap[rhash.hashvalue+offset];
-                            len_t ss = groupVec[dex].get_start_of_search();
-                            if(rhash.hashvalue==hash_provider->make_hash(ss,size,input_view)){
+                    if (iter != hmap.end()) {
+                        index = hmap[rhash.hashvalue];
+                        if (input_view.substr(groupVec[index].get_start_of_search(), size) ==
+                            input_view.substr(rhash.position, size)) {
+                            //NO COLLISSION
+                            if (rhash.position < groupVec[index].get_start_of_search()) {
+                                groupVec[index].absorp_next(rhash.position);
 
-                                bool empty_found=false;
-                                while (!empty_found){
-                                    if(hmap.find(rhash.hashvalue+offset)!=hmap.end()){
-                                        //check if hash match
-                                        dex = hmap[rhash.hashvalue+offset];
-                                        ss = groupVec[dex].get_start_of_search();
-                                        if(rhash.hashvalue==hash_provider->make_hash(ss,size,input_view)){
-                                            hmap[rhash.hashvalue+offset-1]=dex;
-                                            hmap.erase(rhash.hashvalue+offset);
-                                        }
-
-                                    }else{
-                                        empty_found=true;
-                                    }
-                                    offset++;
-                                }
+                            } else {
+                                //this works for all cause thr rolling hash runs over each one
+                                factorVec.push_back(groupVec[index].advance_Group());
                             }
-                            else{
+                            if(hmap.find(rhash.hashvalue+1)!=hmap.end()){
+                                len_t offset = 1;
+                                len_t dex = hmap[rhash.hashvalue+offset];
+                                len_t ss = groupVec[dex].get_start_of_search();
+                                if(rhash.hashvalue==hash_provider->make_hash(ss,size,input_view)){
+
+                                    bool empty_found=false;
+                                    while (!empty_found){
+                                        if(hmap.find(rhash.hashvalue+offset)!=hmap.end()){
+                                            //check if hash match
+                                            dex = hmap[rhash.hashvalue+offset];
+                                            ss = groupVec[dex].get_start_of_search();
+                                            if(rhash.hashvalue==hash_provider->make_hash(ss,size,input_view)){
+                                                hmap[rhash.hashvalue+offset-1]=dex;
+                                                hmap.erase(rhash.hashvalue+offset);
+                                            }
+
+                                        }else{
+                                            empty_found=true;
+                                        }
+                                        offset++;
+                                    }
+                                }
+                                else{
+                                    hmap.erase(rhash.hashvalue);
+                                }
+
+                            }else{
                                 hmap.erase(rhash.hashvalue);
                             }
 
-                        }else{
-                            hmap.erase(rhash.hashvalue);
-                        }
+                            //REMEMBER THAT THE TRUE HASH IS THE LAST WITH COLLISION
 
-                        //REMEMBER THAT THE TRUE HASH IS THE LAST WITH COLLISION
+                        } else {
+                            //COLLISION
+                            len_t offset = 1;
+                            bool mt_or_right_found = false;
+                            while (!mt_or_right_found) {
+                                iter = hmap.find(rhash.hashvalue + offset);
+                                if (iter != hmap.end()) {
+                                    index = iter->second;
+                                    if (input_view.substr(groupVec[index].get_position(), size) ==
+                                        input_view.substr(rhash.position, size)) {
+                                        //STRING MATCHES
+                                        if (rhash.position < groupVec[index].get_start_of_search()) {
+                                            groupVec[index].absorp_next(rhash.position);
+                                        } else {
+                                            //this works for all cause thr rolling hash runs over each one
+                                            factorVec.push_back(groupVec[index].advance_Group());
+                                        }
 
-                    } else {
-                        //COLLISION
-                        len_t offset = 1;
-                        bool mt_or_right_found = false;
-                        while (!mt_or_right_found) {
-                            iter = hmap.find(rhash.hashvalue + offset);
-                            if (iter != hmap.end()) {
-                                index = iter->second;
-                                if (input_view.substr(groupVec[index].get_position(), size) ==
-                                    input_view.substr(rhash.position, size)) {
-                                    //STRING MATCHES
-                                    if (rhash.position < groupVec[index].get_start_of_search()) {
-                                        groupVec[index].absorp_next(rhash.position);
-                                    } else {
-                                        //this works for all cause thr rolling hash runs over each one
-                                        factorVec.push_back(groupVec[index].advance_Group());
+                                        hmap.erase(rhash.hashvalue + offset);
+                                        mt_or_right_found = true;
                                     }
-                                    groupVec[index].tookpartinlast=true;
-                                    hmap.erase(rhash.hashvalue + offset);
+                                } else {
+                                    //empty bucket
                                     mt_or_right_found = true;
                                 }
-                            } else {
-                                //empty bucket
-                                mt_or_right_found = true;
+                                offset++;
                             }
-                            offset++;
+
                         }
 
                     }
 
+                    hash_provider->advance_rolling_hash(rhash, input_view);
                 }
+            } else{
+                for (len_compact_t i = size; i < input_view.size(); i++) {
 
-                hash_provider->advance_rolling_hash(rhash, input_view);
+                    iter = hmap.find(rhash.hashvalue);
+                    if (iter != hmap.end()) {
+                        index = hmap[rhash.hashvalue];
+                        if (input_view.substr(groupVec[index].get_start_of_search(), size) ==
+                            input_view.substr(rhash.position, size)) {
+                            if (rhash.position < groupVec[index].get_start_of_search()) {
+                                groupVec[index].absorp_next(rhash.position);
+                            }
+                            else{
+                                //this works for all cause thr rolling hash runs over each one
+                                factorVec.push_back(groupVec[index].advance_Group());
+                            }
+                            hmap.erase(rhash.hashvalue);
+                        }
+                    }
+                    hash_provider->advance_rolling_hash(rhash, input_view);
+                }
             }
 
+
             if (!hmap.empty()) {
-                std::cout<<"hmpa empty  "<<hmap.size()<<"\n";
+
                 //this happens sometimes with the last factor if the searchterm reaches beyond the file
                 // or collisions arnt hit
                 for(auto iter : hmap){
                     factorVec.push_back(groupVec[iter.second].advance_Group());
-                    groupVec[iter.second].tookpartinlast=true;
+
                 }
 
 
             }
 
 
-            std::cout << "search done p2 last: " << std::endl;
+
         }
 
         inline void
         check_groups(uint16_t size, std::vector <Group> &groupVec, std::vector <len_compact_t> &active_index,
                      std::vector <lz77Aprox::Factor> &factorVec) {
 
-            std::cout<<"number groups:"<<groupVec.size()<<std::endl;
 
             std::vector <len_compact_t> mark_delete;
             for (len_compact_t index : active_index) {
-                if(index==99338){
-                    std::cout<<"heyhey\n";
-                }
-                if (groupVec[index].position==172574063){
 
-                    std::cout<<"  ";
-                }
                 Group g = groupVec[index];
                 if (!g.has_next()) {
 
@@ -547,27 +604,12 @@ namespace tdc {
                 }
             }
             //delete all marked
-            bool toot=false;
-            len_t groupVecsize =groupVec.size();
+
+
             len_compact_t index;
             while (!mark_delete.empty()) {
                 index = mark_delete.back();
-                if (index==172574063){
 
-                    std::cout<<"  ";
-                }
-                if (groupVec.back().position==172574063){
-
-                    std::cout<<"  ";
-                }
-                groupVecsize =groupVec.size();
-                if(index==9938){
-                    std::cout<<" ";
-                }
-                if(groupVec.back().get_next_length()*2==64){
-                    toot=true;
-
-                }
                 if (groupVec.size() - 1 == index) {
                     groupVec.pop_back();
                 } else {
@@ -576,10 +618,10 @@ namespace tdc {
                 }
                 mark_delete.pop_back();
             }
-            std::cout<<"groupVecsize"<<groupVecsize<<"\n";
+
         }
 
-        void cherrys_to_groups(std::vector <Group> &groupVec, std::vector <lz77Aprox::Factor> &factorVec,
+        inline void cherrys_to_groups(std::vector <Group> &groupVec, std::vector <lz77Aprox::Factor> &factorVec,
                                std::vector <Chain> &phase2_buffer, uint16_t threshold) {
 
             Chain c;
@@ -591,10 +633,10 @@ namespace tdc {
                     //chain has only one factor skip phase 2
                     if (inc) {
                         factorVec.push_back(
-                                lz77Aprox::Factor(c.get_position(), c.get_position(), c.get_chain(), false));
+                                lz77Aprox::Factor(c.get_position(), c.get_position(), c.get_chain()));
                     } else {
                         factorVec.push_back(
-                                lz77Aprox::Factor(c.get_position(), c.get_position(), c.get_chain(), false));
+                                lz77Aprox::Factor(c.get_position(), c.get_position(), c.get_chain()));
                     }
                     inc = !inc;
                     phase2_buffer.pop_back();
@@ -613,16 +655,16 @@ namespace tdc {
                     continue;
                 }
             }
-            phase2_buffer.clear();
+            phase2_buffer.shrink_to_fit();
         }
 
-        void chains_to_groups(std::vector <Group> &groupVec, std::vector <lz77Aprox::Factor> &factorVec,
+        inline void chains_to_groups(std::vector <Group> &groupVec, std::vector <lz77Aprox::Factor> &factorVec,
                               std::vector <Chain> &curr_Chains, uint16_t threshold) {
 
-            bool inc = false;
+            bool inc = true;
             Chain c;
-            for (len_t i = 0; i < curr_Chains.size(); i++) {
-                c = curr_Chains[i];
+            while(!curr_Chains.empty()) {
+                c = curr_Chains.back();
 
                 if (1 == __builtin_popcount(c.get_chain())) {
                     //chain has only one factor skip phase 2
@@ -630,20 +672,20 @@ namespace tdc {
                     if (!last_set && inc) {
                         factorVec.push_back(
                                 lz77Aprox::Factor(c.get_position() + threshold, c.get_position() + threshold,
-                                                  c.get_chain(), false));
+                                                  c.get_chain()));
                     }
                     if (!last_set && !inc) {
                         factorVec.push_back(
                                 lz77Aprox::Factor(c.get_position() - c.get_chain(), c.get_position() - c.get_chain(),
-                                                  c.get_chain(), false));
+                                                  c.get_chain()));
                     }
                     if (last_set) {
                         factorVec.push_back(
-                                lz77Aprox::Factor(c.get_position(), c.get_position(), c.get_chain(), false));
+                                lz77Aprox::Factor(c.get_position(), c.get_position(), c.get_chain()));
                     }
 
                     inc = !inc;
-
+                    curr_Chains.pop_back();
                     continue;
                 }
                 if (c.get_chain()) {
@@ -651,11 +693,13 @@ namespace tdc {
                     groupVec.push_back(Group(c, inc, threshold));
 
                     inc = !inc;
-
+                    curr_Chains.pop_back();
                     continue;
                 }
                 inc = !inc;
+                curr_Chains.pop_back();
             }
+            curr_Chains.shrink_to_fit();
         }
 
     public:
@@ -682,10 +726,8 @@ namespace tdc {
             auto os = output.as_stream();
             len_compact_t WINDOW_SIZE = config().param("window").as_int() * 2;
             len_compact_t MIN_FACTOR_LENGTH = config().param("threshold").as_int();
-            std::cout << "size: " << input_view.size() << "\n";
-            std::cout <<input_view.substr(5,1)<< " : " <<(int)input_view.substr(5,1)[0]  << "\n";
-            std::cout <<input_view.substr(6,1)<< " : " <<(int)input_view.substr(6,1)[0]  << "\n";
-            std::cout <<input_view.substr(7,1)<< " : " <<(int)input_view.substr(7,1)[0]  << "\n";
+
+
 
             //adjust window size
             while (input_view.size() - 1 < WINDOW_SIZE * 2) {
@@ -716,23 +758,26 @@ namespace tdc {
 
             len_compact_t size = WINDOW_SIZE / 2;
             len_compact_t round = 0;
+            bool collision=false;
 
 
             populate_chainbuffer(curr_Chains, size, input_view);
             StatPhase::wrap("Phase1", [&] {
+                StatPhase::log("Initial chain count", curr_Chains.size());
                 while (size >= MIN_FACTOR_LENGTH) {
                     StatPhase::wrap("Round: " + std::to_string(round), [&] {
 
                         StatPhase::wrap("fill hashmap", [&] {
-                            fill_chain_hashmap(hmap,temp_hmap_storage, curr_Chains, size, input_view, hash_provider);
+                            fill_chain_hashmap(hmap,temp_hmap_storage, curr_Chains, size, input_view, hash_provider,collision);
                         });
 
-                        std::cout << "hmap filled\n";
+                        StatPhase::log("collisions", collision);
+                        StatPhase::log("hmap.size", hmap.size());
                         StatPhase::wrap("Search", [&] {
                             phase1_search(hmap, curr_Chains, size, input_view, hash_provider,
-                                          temp_hmap_storage);
+                                          temp_hmap_storage,collision);
                         });
-                        std::cout << "search done\n";
+
 
                         hmap_storage.push_back(std::move(temp_hmap_storage));
 
@@ -746,24 +791,29 @@ namespace tdc {
                         if (size != MIN_FACTOR_LENGTH) {
                             StatPhase::wrap("make new chains", [&] { new_chains(curr_Chains, size, phase2_buffer); });
                         }
-                        std::cout << "new done\n";
+                        StatPhase::log("chain count", curr_Chains.size());
                         size = size / 2;
                         round++;
+                        collision=false;
                     });
 
                 }
             });
 
-            std::cout << "phase1 done;" << std::endl;
+
             std::vector <Group> groupVec;
             std::vector <lz77Aprox::Factor> factorVec;
 
             len_t counter = 0;
-            StatPhase::wrap("transfer", [&] {
+            StatPhase::wrap("transfer1", [&] {
+                StatPhase::log("cherry count", phase2_buffer.size());
                 //add all cherry in phase 2 buffer to groupvec
-                cherrys_to_groups(groupVec, factorVec, phase2_buffer, MIN_FACTOR_LENGTH);
-
-                chains_to_groups(groupVec, factorVec, curr_Chains, MIN_FACTOR_LENGTH);
+                cherrys_to_groups(groupVec, factorVec, phase2_buffer, MIN_FACTOR_LENGTH);});
+                StatPhase::log("chain group count", groupVec.size());
+                StatPhase::log("chain factor count", factorVec.size());
+            StatPhase::wrap("transfer2", [&] {    chains_to_groups(groupVec, factorVec, curr_Chains, MIN_FACTOR_LENGTH);
+                StatPhase::log(" group count", groupVec.size());
+                StatPhase::log(" factor count", factorVec.size());
                 counter = 0;
                 //start decrasing
             });
@@ -773,68 +823,63 @@ namespace tdc {
             phase2_buffer.clear();
             phase2_buffer.shrink_to_fit();
             len_t old_size=0;
+
             //Phase 2
             std::vector <len_compact_t> active_index;
             StatPhase::wrap("Phase2", [&] {
+                //StatPhase::log("Initial group count", groupVec.size());
                 round = 0;
                 while (!groupVec.empty()) {
 
-                    //std::cout << "____" << size << std::endl;
-                    // for(Group g: groupVec){
-                    //     std::cout<<"gchain: "<<std::bitset<18>(g.get_chain())<<" gpos: "<<g.get_position()<<" src: "<<g.get_src_position()<<std::endl;
-                    // }
+
 
                     StatPhase::wrap("Round: " + std::to_string(round), [&] {
-                        std::cout << "0" << std::endl;
+
                         StatPhase::wrap("findGroup", [&] { find_next_search_groups(groupVec, active_index); });
-                        std::cout << "1" << std::endl;
-                        size = groupVec[active_index.front()].get_next_length() * 2;
-                        if(round!=0&&old_size>=size){
-                            throw std::invalid_argument("same as last round");
-                        }
+
+                        StatPhase::log("active_index size", active_index.size());
+
                         old_size =size;
                         StatPhase::wrap("fill hmap", [&] {
-                            fill_group_hashmap(groupVec, hmap, factorVec, active_index, input_view, hash_provider);
+                            fill_group_hashmap(groupVec, hmap, factorVec, active_index, input_view, hash_provider,collision);
                         });
                         size = groupVec[active_index.front()].get_next_length() * 2;
-                        std::cout << "searchsize: " << groupVec[active_index.front()].get_next_length() * 2
-                                  << std::endl;
-                        //std::cout << "02" << std::endl;
+
+                        StatPhase::log("hmap size", hmap.size());
+
+
                         StatPhase::wrap("search", [&] {
-                            phase2_search(size, groupVec, hmap, factorVec, input_view, hash_provider);
+                            phase2_search(size, groupVec, hmap, factorVec, input_view, hash_provider,collision);
                         });
                         hmap = std::unordered_map<uint64_t, len_compact_t>();
 
 
                         StatPhase::wrap("check", [&] { check_groups(size, groupVec, active_index, factorVec); });
-                        //std::cout << "____" << std::endl;
-                        // for(Group g: groupVec){
-                        //     std::cout<<"gchain: "<<std::bitset<18>(g.get_chain())<<" gpos: "<<g.get_position()<<" src: "<<g.get_src_position()<<std::endl;
-                        // }
+
+                        StatPhase::log("group count", groupVec.size());
                         active_index.clear();
                         groupVec.shrink_to_fit();
-                        //std::cout << "04" << std::endl;
+                        collision=false;
+
                     });
                     round++;
-                    //std::cout << "size: " << size << std::endl;
+
                 }
             });
-            std::cout << "phase2 done;" << std::endl;
             std::sort(factorVec.begin(), factorVec.end());
 
-            // for(lz77Aprox::Factor f:factorVec){
-            //      std::cout << "(" << f.pos << " , "<< f.len <<")";
-            // }
-            //std::cout<< std::endl;
+
 
             lzss::FactorBufferRAM factors;
             // encode
 
             uint16_t threshold_ctz = __builtin_ctz(MIN_FACTOR_LENGTH);
 
-            std::cout << "hmap-storage-size: " << hmap_storage.size() << std::endl;
 
             for (lz77Aprox::Factor f : factorVec) {
+                if(f.pos==1792){
+                    std::cout << "here"<< std::endl;
+                }
                 if (f.pos != f.src) {
                     factors.push_back(lzss::Factor(f.pos, f.src, f.len));
                     if (input_view.substr(f.pos, f.len) != input_view.substr(f.src, f.len)) {
@@ -880,20 +925,35 @@ namespace tdc {
 
                 }
             }
-            std::cout << "facs: " << factorVec.size() << std::endl;
+
             factorVec.clear();
             factorVec.shrink_to_fit();
-            std::cout << "facfound: " << factors.size() << std::endl;
+            //StatPhase::log("factors found", factors.size());
+            len_t com_size=0;
+            len_t old_pos=0;
+            len_t old_len=0;
+            lzss::Factor old_fac;
 
             for (lzss::Factor f : factors) {
+                if(old_pos>f.pos){
+
+                    throw std::invalid_argument("false ref2:");
+
+                }
+                old_fac=f;
+                old_pos=f.pos+f.len;
+                com_size=com_size +f.len;
                 if (input_view.substr(f.pos, f.len) != input_view.substr(f.src, f.len)) {
                     std::cout << "(" << f.pos << " , " << f.src << " , " << f.len << ")" << std::endl;
                     std::cout << "srcstring: " << input_view.substr(f.src, f.len) << std::endl;
                     std::cout << "orgstring: " << input_view.substr(f.pos, f.len) << std::endl;
                     throw std::invalid_argument("false ref2:");
                 }
+                if(f.pos==f.src){
+                     throw std::invalid_argument("false ref3:");
+                }
             }
-            std::cout << "______________" << std::endl;
+            StatPhase::log("cummutative factor length", com_size);
 
             StatPhase::wrap("Encode", [&] {
                 auto coder = lzss_coder_t(config().sub_config("coder")).encoder(output,

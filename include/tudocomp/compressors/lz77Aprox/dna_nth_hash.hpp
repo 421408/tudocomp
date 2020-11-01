@@ -33,10 +33,11 @@ namespace tdc {
                     return 2978368046464386134;
                     //N
                 default:
+                    std::cout<<"hello" <<byte<< " : " <<(int)byte  << "\n"<<std::endl;
                     return 0;
 
             }
-            std::cout<<"hello" <<byte<< " : " <<(int)byte  << "\n"<<std::endl;
+
             throw std::invalid_argument( "what" );
         }
 
