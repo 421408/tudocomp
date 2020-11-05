@@ -22,6 +22,9 @@ namespace tdc {
             bool operator<(const Factor &fac) const {
                 return (pos < fac.pos);
             }
+            bool operator>(const Factor &fac) const {
+                return (pos > fac.pos);
+            }
         }  __attribute__((__packed__));
 
     }

@@ -32,9 +32,10 @@
 #include <tudocomp/compressors/lz77Aprox/Chain.hpp>
 #include <tudocomp/compressors/lz77Aprox/Factor.hpp>
 #include <tudocomp/compressors/lz77Aprox/hash_interface.hpp>
-#include <tudocomp/compressors/lz77Aprox/stackoverflow_hash.hpp>
-#include <tudocomp/compressors/lz77Aprox/berenstein_hash.hpp>
+//#include <tudocomp/compressors/lz77Aprox/stackoverflow_hash.hpp>
+//#include <tudocomp/compressors/lz77Aprox/berenstein_hash.hpp>
 #include <tudocomp/compressors/lz77Aprox/dna_nth_hash.hpp>
+//#include <tudocomp/compressors/lz77Aprox/buz_hash.hpp>
 
 namespace tdc {
     template<typename lzss_coder_t>
@@ -42,7 +43,8 @@ namespace tdc {
 
     private:
         //fills the given chain container with the right a mount of chains
-        inline void populate_chainbuffer(std::vector <Chain> &curr_Chains, len_compact_t size, io::InputView &input_view) {
+        inline void
+        populate_chainbuffer(std::vector <Chain> &curr_Chains, len_compact_t size, io::InputView &input_view) {
 
             for (len_compact_t i = 0; i < input_view.size() - 1 - size * 2; i = i + size * 2) {
 
@@ -53,15 +55,15 @@ namespace tdc {
         }
 
 
-        inline void fill_chain_hashmap(std::unordered_map <uint64_t, len_compact_t> &hmap,std::unordered_map <uint64_t, len_compact_t> &hmap_storage,
-                                std::vector <Chain> &curr_Chains, len_compact_t size, io::InputView &input_view,
-                                hash_interface *hash_provider,bool &collisions) {
+        inline void fill_chain_hashmap(std::unordered_map <uint64_t, len_compact_t> &hmap,
+                                       std::unordered_map <uint64_t, len_compact_t> &hmap_storage,
+                                       std::vector <Chain> &curr_Chains, len_compact_t size, io::InputView &input_view,
+                                       hash_interface *hash_provider, bool &collisions) {
             hmap.reserve(curr_Chains.size());
 
 
             uint64_t hash;
             std::unordered_map<uint64_t, len_compact_t>::iterator iter;
-
 
 
             for (len_compact_t i = 0; i < curr_Chains.size(); i++) {
@@ -82,19 +84,20 @@ namespace tdc {
                         if (curr_Chains[iter->second].get_position() < curr_Chains[i].get_position()) {
                             //old lies before
                             curr_Chains[i].add(size);
-                            insert_into_storage(hmap_storage,hash,curr_Chains[iter->second].get_position(),size,input_view);
+                            insert_into_storage(hmap_storage, hash, curr_Chains[iter->second].get_position(), size,
+                                                input_view);
 
 
                         } else {
                             //old lies behind
                             curr_Chains[iter->second].add(size);
                             hmap[hash] = i;
-                            insert_into_storage(hmap_storage,hash,curr_Chains[i].get_position(),size,input_view);
+                            insert_into_storage(hmap_storage, hash, curr_Chains[i].get_position(), size, input_view);
 
                         }
                     } else {
                         //COLLISION
-                        collisions=true;
+                        collisions = true;
                         bool inserted = false;
                         len_t offset = 1;
                         while (!inserted) {
@@ -113,13 +116,15 @@ namespace tdc {
                                     if (curr_Chains[iter->second].get_position() < curr_Chains[i].get_position()) {
                                         //old lies before
                                         curr_Chains[i].add(size);
-                                        insert_into_storage(hmap_storage,hash,curr_Chains[iter->second].get_position(),size,input_view);
+                                        insert_into_storage(hmap_storage, hash,
+                                                            curr_Chains[iter->second].get_position(), size, input_view);
 
                                     } else {
                                         //old lies behind
                                         curr_Chains[iter->second].add(size);
                                         hmap[hash + offset] = i;
-                                        insert_into_storage(hmap_storage,hash,curr_Chains[i].get_position(),size,input_view);
+                                        insert_into_storage(hmap_storage, hash, curr_Chains[i].get_position(), size,
+                                                            input_view);
 
                                     }
                                     inserted = true;
@@ -136,8 +141,8 @@ namespace tdc {
 
         }
 
-        inline  void insert_into_storage(std::unordered_map <uint64_t, len_compact_t> &hmap, int64_t hash, len_t pos,
-                                 len_compact_t size, io::InputView &input_view) {
+        inline void insert_into_storage(std::unordered_map <uint64_t, len_compact_t> &hmap, int64_t hash, len_t pos,
+                                        len_compact_t size, io::InputView &input_view) {
             bool inserted = false;
             len_t offset = 0;
             std::unordered_map<uint64_t, len_compact_t>::iterator iter;
@@ -147,12 +152,12 @@ namespace tdc {
                 if (iter == hmap.end()) {
                     hmap[hash + offset] = pos;
                     inserted = true;
-                }else{
-                    if(input_view.substr(iter->second,size)==input_view.substr(pos,size)){
-                        if(iter->second>pos){
+                } else {
+                    if (input_view.substr(iter->second, size) == input_view.substr(pos, size)) {
+                        if (iter->second > pos) {
                             hmap[hash + offset] = pos;
                         }
-                        inserted=true;
+                        inserted = true;
                     }
                 }
                 offset++;
@@ -160,9 +165,9 @@ namespace tdc {
         }
 
         inline void phase1_search(std::unordered_map <uint64_t, len_compact_t> &hmap,
-                           std::vector <Chain> &curr_Chains,
-                           len_compact_t size, io::InputView &input_view, hash_interface *hash_provider,
-                           std::unordered_map <uint64_t, len_compact_t> &hmap_storage, bool &coll) {
+                                  std::vector <Chain> &curr_Chains,
+                                  len_compact_t size, io::InputView &input_view, hash_interface *hash_provider,
+                                  std::unordered_map <uint64_t, len_compact_t> &hmap_storage, bool &coll) {
 
             rolling_hash rhash = hash_provider->make_rolling_hash(0, size, input_view);
             len_compact_t index;
@@ -170,7 +175,7 @@ namespace tdc {
             std::unordered_map<uint64_t, len_compact_t>::iterator iter;
             int last = 0;
             len_t collisions = 0;
-            if(coll){
+            if (coll) {
                 for (len_compact_t i = size; i < input_view.size(); i++) {
 
                     iter = hmap.find(rhash.hashvalue);
@@ -184,33 +189,32 @@ namespace tdc {
 
                             if (rhash.position < curr_Chains[index].get_position()) {
                                 curr_Chains[index].add(size);
-                                insert_into_storage(hmap_storage, rhash.hashvalue, rhash.position,size,input_view);
+                                insert_into_storage(hmap_storage, rhash.hashvalue, rhash.position, size, input_view);
                             }
-                            if(hmap.find(rhash.hashvalue+1)!=hmap.end()){
+                            if (hmap.find(rhash.hashvalue + 1) != hmap.end()) {
                                 len_t offset = 1;
-                                len_t dex = hmap[rhash.hashvalue+offset];
+                                len_t dex = hmap[rhash.hashvalue + offset];
                                 len_t ss = curr_Chains[dex].positon;
-                                if(rhash.hashvalue==hash_provider->make_hash(ss,size,input_view)){
-                                    bool empty_found=false;
-                                    while (!empty_found){
-                                        if(hmap.find(rhash.hashvalue+offset)!=hmap.end()){
+                                if (rhash.hashvalue == hash_provider->make_hash(ss, size, input_view)) {
+                                    bool empty_found = false;
+                                    while (!empty_found) {
+                                        if (hmap.find(rhash.hashvalue + offset) != hmap.end()) {
                                             //check if hash match
-                                            dex = hmap[rhash.hashvalue+offset];
+                                            dex = hmap[rhash.hashvalue + offset];
                                             ss = curr_Chains[dex].positon;
-                                            if(rhash.hashvalue==hash_provider->make_hash(ss,size,input_view)){
-                                                hmap[rhash.hashvalue+offset-1]=dex;
-                                                hmap.erase(rhash.hashvalue+offset);
+                                            if (rhash.hashvalue == hash_provider->make_hash(ss, size, input_view)) {
+                                                hmap[rhash.hashvalue + offset - 1] = dex;
+                                                hmap.erase(rhash.hashvalue + offset);
                                             }
-                                        }else{
-                                            empty_found=true;
+                                        } else {
+                                            empty_found = true;
                                         }
                                         offset++;
                                     }
-                                }
-                                else{
+                                } else {
                                     hmap.erase(rhash.hashvalue);
                                 }
-                            } else{
+                            } else {
                                 hmap.erase(rhash.hashvalue);
                             }
 
@@ -232,7 +236,8 @@ namespace tdc {
                                         }
 
                                         //do this to have src for duplicates in hmapfill
-                                        insert_into_storage(hmap_storage, rhash.hashvalue + offset, rhash.position,size,input_view);
+                                        insert_into_storage(hmap_storage, rhash.hashvalue + offset, rhash.position,
+                                                            size, input_view);
                                         hmap.erase(rhash.hashvalue + offset);
                                         mt_or_right_found = true;
 
@@ -248,12 +253,9 @@ namespace tdc {
 
                     hash_provider->advance_rolling_hash(rhash, input_view);
                 }
-            }
-            else{
+            } else {
                 for (len_compact_t i = size; i < input_view.size(); i++) {
-                    if(rhash.hashvalue==7912804102649040){
-                        std::cout<<"here\n";
-                    }
+
                     iter = hmap.find(rhash.hashvalue);
                     if (iter != hmap.end()) {
                         index = hmap[rhash.hashvalue];
@@ -262,7 +264,7 @@ namespace tdc {
                             //TRUE MATCH
                             if (rhash.position < curr_Chains[index].get_position()) {
                                 curr_Chains[index].add(size);
-                                insert_into_storage(hmap_storage, rhash.hashvalue, rhash.position,size,input_view);
+                                insert_into_storage(hmap_storage, rhash.hashvalue, rhash.position, size, input_view);
                             }
                             hmap.erase(rhash.hashvalue);
                         }
@@ -272,7 +274,6 @@ namespace tdc {
                     hash_provider->advance_rolling_hash(rhash, input_view);
                 }
             }
-
 
 
         }
@@ -325,7 +326,7 @@ namespace tdc {
                     Chains.pop_back();
                     if (curr_size <= oldsize) {
                         i = i - 2;
-                        oldsize=oldsize-2;
+                        oldsize = oldsize - 2;
                     }
 
                     continue;
@@ -368,10 +369,10 @@ namespace tdc {
         }
 
         inline void fill_group_hashmap(std::vector <Group> &groupVec,
-                                std::unordered_map <uint64_t, len_compact_t> &hmap,
-                                std::vector <lz77Aprox::Factor> &factorVec,
-                                std::vector <len_compact_t> &active_index, io::InputView &input_view,
-                                hash_interface *hash_provider,bool &collisions) {
+                                       std::unordered_map <uint64_t, len_compact_t> &hmap,
+                                       std::vector <lz77Aprox::Factor> &factorVec,
+                                       std::vector <len_compact_t> &active_index, io::InputView &input_view,
+                                       hash_interface *hash_provider, bool &collisions) {
 
             uint16_t size = groupVec[active_index.front()].get_next_length() * 2;
             uint64_t hash;
@@ -410,7 +411,7 @@ namespace tdc {
                             //COLLISION
                             bool inserted = false;
                             len_t offset = 1;
-                            collisions=true;
+                            collisions = true;
                             while (!inserted) {
                                 iter = hmap.find(hash + offset);
                                 if (iter == hmap.end()) {
@@ -428,7 +429,7 @@ namespace tdc {
                                             groupVec[iter->second].get_start_of_search()) {
 
                                             groupVec[iter->second].absorp_next(groupVec[i].get_start_of_search());
-                                            hmap[hash+offset] = i;
+                                            hmap[hash + offset] = i;
                                         } else {
                                             groupVec[i].absorp_next(groupVec[iter->second].get_start_of_search());
                                         }
@@ -463,11 +464,10 @@ namespace tdc {
             std::unordered_map<uint64_t, len_compact_t>::iterator iter;
             len_compact_t index;
 
-            if(coll){
+            if (coll) {
                 for (len_compact_t i = size; i < input_view.size(); i++) {
 
                     iter = hmap.find(rhash.hashvalue);
-
 
 
                     if (iter != hmap.end()) {
@@ -482,34 +482,33 @@ namespace tdc {
                                 //this works for all cause thr rolling hash runs over each one
                                 factorVec.push_back(groupVec[index].advance_Group());
                             }
-                            if(hmap.find(rhash.hashvalue+1)!=hmap.end()){
+                            if (hmap.find(rhash.hashvalue + 1) != hmap.end()) {
                                 len_t offset = 1;
-                                len_t dex = hmap[rhash.hashvalue+offset];
+                                len_t dex = hmap[rhash.hashvalue + offset];
                                 len_t ss = groupVec[dex].get_start_of_search();
-                                if(rhash.hashvalue==hash_provider->make_hash(ss,size,input_view)){
+                                if (rhash.hashvalue == hash_provider->make_hash(ss, size, input_view)) {
 
-                                    bool empty_found=false;
-                                    while (!empty_found){
-                                        if(hmap.find(rhash.hashvalue+offset)!=hmap.end()){
+                                    bool empty_found = false;
+                                    while (!empty_found) {
+                                        if (hmap.find(rhash.hashvalue + offset) != hmap.end()) {
                                             //check if hash match
-                                            dex = hmap[rhash.hashvalue+offset];
+                                            dex = hmap[rhash.hashvalue + offset];
                                             ss = groupVec[dex].get_start_of_search();
-                                            if(rhash.hashvalue==hash_provider->make_hash(ss,size,input_view)){
-                                                hmap[rhash.hashvalue+offset-1]=dex;
-                                                hmap.erase(rhash.hashvalue+offset);
+                                            if (rhash.hashvalue == hash_provider->make_hash(ss, size, input_view)) {
+                                                hmap[rhash.hashvalue + offset - 1] = dex;
+                                                hmap.erase(rhash.hashvalue + offset);
                                             }
 
-                                        }else{
-                                            empty_found=true;
+                                        } else {
+                                            empty_found = true;
                                         }
                                         offset++;
                                     }
-                                }
-                                else{
+                                } else {
                                     hmap.erase(rhash.hashvalue);
                                 }
 
-                            }else{
+                            } else {
                                 hmap.erase(rhash.hashvalue);
                             }
 
@@ -549,7 +548,7 @@ namespace tdc {
 
                     hash_provider->advance_rolling_hash(rhash, input_view);
                 }
-            } else{
+            } else {
                 for (len_compact_t i = size; i < input_view.size(); i++) {
 
                     iter = hmap.find(rhash.hashvalue);
@@ -559,8 +558,7 @@ namespace tdc {
                             input_view.substr(rhash.position, size)) {
                             if (rhash.position < groupVec[index].get_start_of_search()) {
                                 groupVec[index].absorp_next(rhash.position);
-                            }
-                            else{
+                            } else {
                                 //this works for all cause thr rolling hash runs over each one
                                 factorVec.push_back(groupVec[index].advance_Group());
                             }
@@ -576,14 +574,13 @@ namespace tdc {
 
                 //this happens sometimes with the last factor if the searchterm reaches beyond the file
                 // or collisions arnt hit
-                for(auto iter : hmap){
+                for (auto iter : hmap) {
                     factorVec.push_back(groupVec[iter.second].advance_Group());
 
                 }
 
 
             }
-
 
 
         }
@@ -622,7 +619,7 @@ namespace tdc {
         }
 
         inline void cherrys_to_groups(std::vector <Group> &groupVec, std::vector <lz77Aprox::Factor> &factorVec,
-                               std::vector <Chain> &phase2_buffer, uint16_t threshold) {
+                                      std::vector <Chain> &phase2_buffer, uint16_t threshold) {
 
             Chain c;
             // start with decreasing
@@ -659,47 +656,52 @@ namespace tdc {
         }
 
         inline void chains_to_groups(std::vector <Group> &groupVec, std::vector <lz77Aprox::Factor> &factorVec,
-                              std::vector <Chain> &curr_Chains, uint16_t threshold) {
+                                     std::vector <Chain> &curr_Chains, uint16_t threshold) {
 
             bool inc = true;
             Chain c;
-            while(!curr_Chains.empty()) {
+            len_t shrink_counter = 0;
+            while (!curr_Chains.empty()) {
+                if (shrink_counter == 4096 * 2) {
+                    curr_Chains.shrink_to_fit();
+                    shrink_counter = 0;
+                }
                 c = curr_Chains.back();
-
+                shrink_counter++;
                 if (1 == __builtin_popcount(c.get_chain())) {
                     //chain has only one factor skip phase 2
                     bool last_set = threshold & c.get_chain();
                     if (!last_set && inc) {
-                        factorVec.push_back(
-                                lz77Aprox::Factor(c.get_position() + threshold, c.get_position() + threshold,
-                                                  c.get_chain()));
+                        factorVec.emplace_back(
+                                c.get_position() + threshold, c.get_position() + threshold,
+                                std::move(c.get_chain()));
                     }
                     if (!last_set && !inc) {
-                        factorVec.push_back(
-                                lz77Aprox::Factor(c.get_position() - c.get_chain(), c.get_position() - c.get_chain(),
-                                                  c.get_chain()));
+                        factorVec.emplace_back(
+                                c.get_position() - c.get_chain(), c.get_position() - c.get_chain(),
+                                std::move(c.get_chain()));
                     }
                     if (last_set) {
-                        factorVec.push_back(
-                                lz77Aprox::Factor(c.get_position(), c.get_position(), c.get_chain()));
+                        factorVec.emplace_back(
+                                c.get_position(), c.get_position(), std::move(c.get_chain()));
                     }
 
                     inc = !inc;
                     curr_Chains.pop_back();
                     continue;
-                }
-                if (c.get_chain()) {
-                    //chain is not null
-                    groupVec.push_back(Group(c, inc, threshold));
+                    if (c.get_chain()) {
+                        //chain is not null
+                        groupVec.push_back(Group(std::move(c), inc, threshold));
 
+                        inc = !inc;
+                        curr_Chains.pop_back();
+                        continue;
+                    }
                     inc = !inc;
                     curr_Chains.pop_back();
-                    continue;
                 }
-                inc = !inc;
-                curr_Chains.pop_back();
+                curr_Chains.shrink_to_fit();
             }
-            curr_Chains.shrink_to_fit();
         }
 
     public:
@@ -738,8 +740,9 @@ namespace tdc {
             hash_interface *hash_provider;
 
             //hash_provider = new berenstein_hash();
-            //hash_provider = new dna_nth_hash();
-            hash_provider = new stackoverflow_hash();
+            hash_provider = new dna_nth_hash();
+            //hash_provider = new stackoverflow_hash();
+            //hash_provider = new buz_hash();
 
 
             //make reusable containers
@@ -758,7 +761,7 @@ namespace tdc {
 
             len_compact_t size = WINDOW_SIZE / 2;
             len_compact_t round = 0;
-            bool collision=false;
+            bool collision = false;
 
 
             populate_chainbuffer(curr_Chains, size, input_view);
@@ -768,14 +771,15 @@ namespace tdc {
                     StatPhase::wrap("Round: " + std::to_string(round), [&] {
 
                         StatPhase::wrap("fill hashmap", [&] {
-                            fill_chain_hashmap(hmap,temp_hmap_storage, curr_Chains, size, input_view, hash_provider,collision);
+                            fill_chain_hashmap(hmap, temp_hmap_storage, curr_Chains, size, input_view, hash_provider,
+                                               collision);
                         });
 
                         StatPhase::log("collisions", collision);
                         StatPhase::log("hmap.size", hmap.size());
                         StatPhase::wrap("Search", [&] {
                             phase1_search(hmap, curr_Chains, size, input_view, hash_provider,
-                                          temp_hmap_storage,collision);
+                                          temp_hmap_storage, collision);
                         });
 
 
@@ -794,7 +798,7 @@ namespace tdc {
                         StatPhase::log("chain count", curr_Chains.size());
                         size = size / 2;
                         round++;
-                        collision=false;
+                        collision = false;
                     });
 
                 }
@@ -808,10 +812,12 @@ namespace tdc {
             StatPhase::wrap("transfer1", [&] {
                 StatPhase::log("cherry count", phase2_buffer.size());
                 //add all cherry in phase 2 buffer to groupvec
-                cherrys_to_groups(groupVec, factorVec, phase2_buffer, MIN_FACTOR_LENGTH);});
-                StatPhase::log("chain group count", groupVec.size());
-                StatPhase::log("chain factor count", factorVec.size());
-            StatPhase::wrap("transfer2", [&] {    chains_to_groups(groupVec, factorVec, curr_Chains, MIN_FACTOR_LENGTH);
+                cherrys_to_groups(groupVec, factorVec, phase2_buffer, MIN_FACTOR_LENGTH);
+            });
+            StatPhase::log("chain group count", groupVec.size());
+            StatPhase::log("chain factor count", factorVec.size());
+            StatPhase::wrap("transfer2", [&] {
+                chains_to_groups(groupVec, factorVec, curr_Chains, MIN_FACTOR_LENGTH);
                 StatPhase::log(" group count", groupVec.size());
                 StatPhase::log(" factor count", factorVec.size());
                 counter = 0;
@@ -822,7 +828,7 @@ namespace tdc {
             curr_Chains.shrink_to_fit();
             phase2_buffer.clear();
             phase2_buffer.shrink_to_fit();
-            len_t old_size=0;
+            len_t old_size = 0;
 
             //Phase 2
             std::vector <len_compact_t> active_index;
@@ -832,16 +838,16 @@ namespace tdc {
                 while (!groupVec.empty()) {
 
 
-
                     StatPhase::wrap("Round: " + std::to_string(round), [&] {
 
                         StatPhase::wrap("findGroup", [&] { find_next_search_groups(groupVec, active_index); });
 
                         StatPhase::log("active_index size", active_index.size());
 
-                        old_size =size;
+                        old_size = size;
                         StatPhase::wrap("fill hmap", [&] {
-                            fill_group_hashmap(groupVec, hmap, factorVec, active_index, input_view, hash_provider,collision);
+                            fill_group_hashmap(groupVec, hmap, factorVec, active_index, input_view, hash_provider,
+                                               collision);
                         });
                         size = groupVec[active_index.front()].get_next_length() * 2;
 
@@ -849,7 +855,7 @@ namespace tdc {
 
 
                         StatPhase::wrap("search", [&] {
-                            phase2_search(size, groupVec, hmap, factorVec, input_view, hash_provider,collision);
+                            phase2_search(size, groupVec, hmap, factorVec, input_view, hash_provider, collision);
                         });
                         hmap = std::unordered_map<uint64_t, len_compact_t>();
 
@@ -859,102 +865,111 @@ namespace tdc {
                         StatPhase::log("group count", groupVec.size());
                         active_index.clear();
                         groupVec.shrink_to_fit();
-                        collision=false;
+                        collision = false;
 
                     });
                     round++;
 
                 }
             });
-            std::sort(factorVec.begin(), factorVec.end());
-
+            std::sort(factorVec.begin(), factorVec.end(), std::greater<lz77Aprox::Factor>());
 
 
             lzss::FactorBufferRAM factors;
             // encode
 
             uint16_t threshold_ctz = __builtin_ctz(MIN_FACTOR_LENGTH);
-
-
-            for (lz77Aprox::Factor f : factorVec) {
-                if(f.pos==1792){
-                    std::cout << "here"<< std::endl;
-                }
-                if (f.pos != f.src) {
-                    factors.push_back(lzss::Factor(f.pos, f.src, f.len));
-                    if (input_view.substr(f.pos, f.len) != input_view.substr(f.src, f.len)) {
-                        std::cout << "fpos: " << f.pos << " fsrc: " << f.src << "f.len: " << f.len << std::endl;
-                        std::cout << "fac: " << input_view.substr(f.pos, f.len) << std::endl
-                                  << hash_provider->make_hash(f.pos, f.len, input_view) << std::endl;
-                        std::cout << "src: " << input_view.substr(f.src, f.len) << std::endl
-                                  << hash_provider->make_hash(f.src, f.len, input_view) << std::endl;
-                        throw std::invalid_argument("forawrdref2:");
+            lz77Aprox::Factor f;
+            len_t shrink_counter = 0;
+            StatPhase::wrap("transfer3", [&] {
+                while (!factorVec.empty()) {
+                    if (shrink_counter == 4096 * 2) {
+                        factorVec.shrink_to_fit();
+                        shrink_counter = 0;
                     }
+                    shrink_counter++;
+                    f = factorVec.back();
+                    factorVec.pop_back();
 
-                    if (f.pos < f.src) {
-                        std::cout << "fpos: " << f.pos << " fsrc: " << f.src << "f.len: " << f.len << std::endl;
-                        std::cout << "fac: " << input_view.substr(f.pos, f.len) << std::endl;
-                        std::cout << "src: " << input_view.substr(f.src, f.len) << std::endl;
-                        throw std::invalid_argument("forawrdref:");
-                    }
-                } else {
-                    uint16_t hmap_index = hmap_storage.size() - 1 - (__builtin_ctz(f.len) - threshold_ctz);
-                    uint64_t hash = hash_provider->make_hash(f.pos, f.len, input_view);
-                    len_compact_t src = hmap_storage[hmap_index][hash];
-                    len_t offset = 0;
+                    if (f.pos != f.src) {
+                        factors.emplace_back(f.pos, f.src, f.len);
+                        if (input_view.substr(f.pos, f.len) != input_view.substr(f.src, f.len)) {
+                            std::cout << "fpos: " << f.pos << " fsrc: " << f.src << "f.len: " << f.len << std::endl;
+                            std::cout << "fac: " << input_view.substr(f.pos, f.len) << std::endl
+                                      << hash_provider->make_hash(f.pos, f.len, input_view) << std::endl;
+                            std::cout << "src: " << input_view.substr(f.src, f.len) << std::endl
+                                      << hash_provider->make_hash(f.src, f.len, input_view) << std::endl;
+                            throw std::invalid_argument("forawrdref2:");
+                        }
 
-                    //COLLISION
-                    bool found = false;
-                    while (!found) {
-                        std::unordered_map<uint64_t, len_compact_t>::iterator iter = hmap_storage[hmap_index].find(
-                                hash + offset);
-                        if (iter != hmap_storage[hmap_index].end()) {
-                            src = iter->second;
-                            if (input_view.substr(f.pos, f.len) == input_view.substr(src, f.len)) {
-                                //string matches
-                                factors.push_back(lzss::Factor(f.pos, src, f.len));
+                        if (f.pos < f.src) {
+                            std::cout << "fpos: " << f.pos << " fsrc: " << f.src << "f.len: " << f.len << std::endl;
+                            std::cout << "fac: " << input_view.substr(f.pos, f.len) << std::endl;
+                            std::cout << "src: " << input_view.substr(f.src, f.len) << std::endl;
+                            throw std::invalid_argument("forawrdref:");
+                        }
+                    } else {
+                        uint16_t hmap_index = hmap_storage.size() - 1 - (__builtin_ctz(f.len) - threshold_ctz);
+                        uint64_t hash = hash_provider->make_hash(f.pos, f.len, input_view);
+                        len_compact_t src = hmap_storage[hmap_index][hash];
+                        len_t offset = 0;
+
+                        //COLLISION
+                        bool found = false;
+                        while (!found) {
+                            std::unordered_map<uint64_t, len_compact_t>::iterator iter = hmap_storage[hmap_index].find(
+                                    hash + offset);
+                            if (iter != hmap_storage[hmap_index].end()) {
+                                src = iter->second;
+                                if (input_view.substr(f.pos, f.len) == input_view.substr(src, f.len)) {
+                                    //string matches
+                                    factors.emplace_back(f.pos, src, f.len);
+                                    found = true;
+                                }
+                            } else {
+                                //this shouldnt happen
                                 found = true;
                             }
-                        } else {
-                            //this shouldnt happen
-                            found = true;
+                            offset++;
                         }
-                        offset++;
+
+
                     }
 
 
                 }
-            }
+            });
 
             factorVec.clear();
             factorVec.shrink_to_fit();
             //StatPhase::log("factors found", factors.size());
-            len_t com_size=0;
-            len_t old_pos=0;
-            len_t old_len=0;
+            len_t com_size = 0;
+            len_t old_pos = 0;
+
             lzss::Factor old_fac;
+            StatPhase::wrap("transfer4", [&] {
+                for (lzss::Factor f : factors) {
+                    if (old_pos > f.pos) {
 
-            for (lzss::Factor f : factors) {
-                if(old_pos>f.pos){
+                        throw std::invalid_argument("false ref2:");
 
-                    throw std::invalid_argument("false ref2:");
-
+                    }
+                    old_fac = f;
+                    old_pos = f.pos + f.len;
+                    com_size = com_size + f.len;
+                    if (input_view.substr(f.pos, f.len) != input_view.substr(f.src, f.len)) {
+                        std::cout << "(" << f.pos << " , " << f.src << " , " << f.len << ")" << std::endl;
+                        std::cout << "srcstring: " << input_view.substr(f.src, f.len) << std::endl;
+                        std::cout << "orgstring: " << input_view.substr(f.pos, f.len) << std::endl;
+                        throw std::invalid_argument("false ref2:");
+                    }
+                    if (f.pos == f.src) {
+                        throw std::invalid_argument("false ref3:");
+                    }
                 }
-                old_fac=f;
-                old_pos=f.pos+f.len;
-                com_size=com_size +f.len;
-                if (input_view.substr(f.pos, f.len) != input_view.substr(f.src, f.len)) {
-                    std::cout << "(" << f.pos << " , " << f.src << " , " << f.len << ")" << std::endl;
-                    std::cout << "srcstring: " << input_view.substr(f.src, f.len) << std::endl;
-                    std::cout << "orgstring: " << input_view.substr(f.pos, f.len) << std::endl;
-                    throw std::invalid_argument("false ref2:");
-                }
-                if(f.pos==f.src){
-                     throw std::invalid_argument("false ref3:");
-                }
-            }
+            });
             StatPhase::log("cummutative factor length", com_size);
-
+            delete hash_provider;
             StatPhase::wrap("Encode", [&] {
                 auto coder = lzss_coder_t(config().sub_config("coder")).encoder(output,
                                                                                 lzss::UnreplacedLiterals<decltype(input_view), decltype(factors)>(

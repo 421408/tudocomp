@@ -8,7 +8,7 @@ namespace tdc{
     class berenstein_hash : public hash_interface{
 
     private:
-        const unsigned PRIME_BASE=33;
+        const uint32_t PRIME_BASE=33;
         const int64_t PRIME_MOD=(1ULL<<31)-1;
 
     public:
@@ -20,7 +20,7 @@ namespace tdc{
         ~berenstein_hash(){};
 
 
-        uint64_t make_hash(len_t start, len_t size,io::InputView &input_view){
+        uint32_t make_hash(len_t start, len_t size,io::InputView &input_view){
 
 
             long long hash =0;
@@ -44,20 +44,20 @@ namespace tdc{
             return rhash;
         }
         //https://ariya.io/2007/02/modulus-with-mersenne-prime
-        inline int64_t modulo(int64_t hash){
-            int64_t moded = (hash & PRIME_MOD)+(hash>>31);
+        inline uint32_t modulo(uint32_t hash){
+            uint32_t moded = (hash & PRIME_MOD)+(hash>>31);
             return (moded>=PRIME_MOD) ? hash - PRIME_MOD : moded;
         }
 
         void advance_rolling_hash(rolling_hash &rhash,io::InputView &input_view){
 
-            uint64_t oldhash=rhash.hashvalue;
+            uint32_t oldhash=rhash.hashvalue;
 
-            uint64_t first = modulo(input_view[rhash.position]*rhash.c0_exp);
+            uint32_t first = modulo(input_view[rhash.position]*rhash.c0_exp);
 
-            uint64_t old_minus = modulo(oldhash-first);
-            uint64_t c = modulo(old_minus<<5);
-            uint64_t d = modulo(c+old_minus);
+            uint32_t old_minus = modulo(oldhash-first);
+            uint32_t c = modulo(old_minus<<5);
+            uint32_t d = modulo(c+old_minus);
             rhash.hashvalue = modulo(d+input_view[rhash.position+rhash.length]);
 
             //rhash.hashvalue = modulo(modulo(modulo(hash_minus_first<<5)+hash_minus_first)  +input_view[rhash.position+rhash.length]);
@@ -67,8 +67,8 @@ namespace tdc{
              if(rhash.hashvalue!=make_hash(rhash.position,rhash.length,input_view)){
                 long long hash =0;
                  for (size_t i = 0; i < rhash.length; i++){
-                     uint64_t x=modulo(hash<<5);
-                     uint64_t y=modulo(x+hash);
+                     uint32_t x=modulo(hash<<5);
+                     uint32_t y=modulo(x+hash);
 
                      hash = modulo( y+input_view[rhash.position+i]);
                  }
