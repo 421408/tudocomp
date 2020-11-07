@@ -11,7 +11,7 @@ namespace tdc{
         const uint64_t PRIME_MOD;
 
 
-        //http://www.serve.net/buz/hash.adt/java.000.html for info
+        //http://www.serve.net/buz/hash.adt/java.002.html for info
         //and http://www.java2s.com/Code/Java/Development-Class/AveryefficientjavahashalgorithmbasedontheBuzHashalgoritm.htm as source of table
         const uint64_t tab[256]= {0x4476081a7043a46f, 0x45768b8a6e7eac19, 0xebd556c1cf055952,
                                   0x72ed2da1bf010101, 0x3ff2030b128e8a64,

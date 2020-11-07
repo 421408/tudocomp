@@ -1,4 +1,4 @@
-#!/bin/sh
+y#!/bin/sh
 CMAKE_OPTS=$@
 
 mkdir -p build && cd build
