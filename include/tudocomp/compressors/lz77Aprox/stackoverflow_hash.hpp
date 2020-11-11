@@ -4,7 +4,7 @@
 #include <tudocomp/compressors/lz77Aprox/hash_interface.hpp>
 namespace tdc{
 
-    class stackoverflow_hash : public hash_interface{
+    class  stackoverflow_hash final: public hash_interface{
 
     private:
         const unsigned PRIME_BASE;

@@ -33,9 +33,9 @@
 #include <tudocomp/compressors/lz77Aprox/Factor.hpp>
 #include <tudocomp/compressors/lz77Aprox/hash_interface.hpp>
 //#include <tudocomp/compressors/lz77Aprox/stackoverflow_hash.hpp>
-//#include <tudocomp/compressors/lz77Aprox/berenstein_hash.hpp>
+#include <tudocomp/compressors/lz77Aprox/berenstein_hash.hpp>
 //#include <tudocomp/compressors/lz77Aprox/dna_nth_hash.hpp>
-#include <tudocomp/compressors/lz77Aprox/buz_hash.hpp>
+//#include <tudocomp/compressors/lz77Aprox/buz_hash.hpp>
 
 namespace tdc {
     template<typename lzss_coder_t>
@@ -55,15 +55,15 @@ namespace tdc {
         }
 
 
-        inline void fill_chain_hashmap(std::unordered_map <uint64_t, len_compact_t> &hmap,
-                                       std::unordered_map <uint64_t, len_compact_t> &hmap_storage,
+        inline void fill_chain_hashmap(std::unordered_map <uint32_t, len_compact_t> &hmap,
+                                       std::unordered_map <uint32_t, len_compact_t> &hmap_storage,
                                        std::vector <Chain> &curr_Chains, len_compact_t size, io::InputView &input_view,
                                        hash_interface *hash_provider, bool &collisions) {
             hmap.reserve(curr_Chains.size());
 
 
-            uint64_t hash;
-            std::unordered_map<uint64_t, len_compact_t>::iterator iter;
+            uint32_t hash;
+            std::unordered_map<uint32_t, len_compact_t>::iterator iter;
 
 
             for (len_compact_t i = 0; i < curr_Chains.size(); i++) {
@@ -142,15 +142,15 @@ namespace tdc {
         }
 
 
-        inline void fill_chain_hashmap_no_store(std::unordered_map <uint64_t, len_compact_t> &hmap,
+        inline void fill_chain_hashmap_no_store(std::unordered_map <uint32_t, len_compact_t> &hmap,
                                                 std::vector <Chain> &curr_Chains, len_compact_t size,
                                                 io::InputView &input_view,
                                                 hash_interface *hash_provider, bool &collisions) {
             hmap.reserve(curr_Chains.size());
 
 
-            uint64_t hash;
-            std::unordered_map<uint64_t, len_compact_t>::iterator iter;
+            uint32_t hash;
+            std::unordered_map<uint32_t, len_compact_t>::iterator iter;
 
 
             for (len_compact_t i = 0; i < curr_Chains.size(); i++) {
@@ -225,11 +225,11 @@ namespace tdc {
         }
 
 
-        inline void insert_into_storage(std::unordered_map <uint64_t, len_compact_t> &hmap, int64_t hash, len_t pos,
+        inline void insert_into_storage(std::unordered_map <uint32_t, len_compact_t> &hmap, int64_t hash, len_t pos,
                                         len_compact_t size, io::InputView &input_view) {
             bool inserted = false;
             len_t offset = 0;
-            std::unordered_map<uint64_t, len_compact_t>::iterator iter;
+            std::unordered_map<uint32_t, len_compact_t>::iterator iter;
 
             while (!inserted) {
                 iter = hmap.find(hash + offset);
@@ -248,15 +248,15 @@ namespace tdc {
             }
         }
 
-        inline void phase1_search(std::unordered_map <uint64_t, len_compact_t> &hmap,
+        inline void phase1_search(std::unordered_map <uint32_t, len_compact_t> &hmap,
                                   std::vector <Chain> &curr_Chains,
                                   len_compact_t size, io::InputView &input_view, hash_interface *hash_provider,
-                                  std::unordered_map <uint64_t, len_compact_t> &hmap_storage, bool &coll) {
+                                  std::unordered_map <uint32_t, len_compact_t> &hmap_storage, bool &coll) {
 
             rolling_hash rhash = hash_provider->make_rolling_hash(0, size, input_view);
             len_compact_t index;
 
-            std::unordered_map<uint64_t, len_compact_t>::iterator iter;
+            std::unordered_map<uint32_t, len_compact_t>::iterator iter;
             int last = 0;
             len_t collisions = 0;
             if (coll) {
@@ -363,7 +363,7 @@ namespace tdc {
         }
 
 
-        inline void phase1_search_no_store(std::unordered_map <uint64_t, len_compact_t> &hmap,
+        inline void phase1_search_no_store(std::unordered_map <uint32_t, len_compact_t> &hmap,
                                            std::vector <Chain> &curr_Chains,
                                            len_compact_t size, io::InputView &input_view, hash_interface *hash_provider,
                                            bool &coll) {
@@ -371,7 +371,7 @@ namespace tdc {
             rolling_hash rhash = hash_provider->make_rolling_hash(0, size, input_view);
             len_compact_t index;
 
-            std::unordered_map<uint64_t, len_compact_t>::iterator iter;
+            std::unordered_map<uint32_t, len_compact_t>::iterator iter;
             int last = 0;
             len_t collisions = 0;
             if (coll) {
@@ -566,14 +566,14 @@ namespace tdc {
         }
 
         inline void fill_group_hashmap(std::vector <Group> &groupVec,
-                                       std::unordered_map <uint64_t, len_compact_t> &hmap,
+                                       std::unordered_map <uint32_t, len_compact_t> &hmap,
                                        std::vector <lz77Aprox::Factor> &factorVec,
                                        std::vector <len_compact_t> &active_index, io::InputView &input_view,
                                        hash_interface *hash_provider, bool &collisions) {
 
             len_t size = groupVec[active_index.front()].get_next_length() * 2;
-            uint64_t hash;
-            std::unordered_map<uint64_t, len_compact_t>::iterator iter;
+            uint32_t hash;
+            std::unordered_map<uint32_t, len_compact_t>::iterator iter;
 
 
             for (len_compact_t i : active_index) {
@@ -653,13 +653,13 @@ namespace tdc {
 
 
         inline void
-        phase2_search(len_compact_t size, std::vector <Group> &groupVec, std::unordered_map <uint64_t, len_compact_t> &hmap,
+        phase2_search(len_compact_t size, std::vector <Group> &groupVec, std::unordered_map <uint32_t, len_compact_t> &hmap,
 
                       std::vector <lz77Aprox::Factor> &factorVec, io::InputView &input_view,
                       hash_interface *hash_provider, bool &coll) {
             rolling_hash rhash = hash_provider->make_rolling_hash(0, size, input_view);
 
-            std::unordered_map<uint64_t, len_compact_t>::iterator iter;
+            std::unordered_map<uint32_t, len_compact_t>::iterator iter;
             len_compact_t index;
 
             if (coll) {
@@ -917,8 +917,10 @@ namespace tdc {
         inline void research_positions(std::vector <lz77Aprox::Factor> &factorVec, len_t threshold,
                                        hash_interface *hash_provider, io::InputView &input_view) {
             //output hmap with index of factors to search
-            std::unordered_map <uint64_t, len_compact_t> hmap;
+            std::unordered_map <uint32_t, len_compact_t> hmap;
+
             len_t min_size = 32768;
+            len_t old_size;
             while (min_size >= threshold) {
                 bool collisions = false;
                 for (len_t i = 0; i < factorVec.size(); i++) {
@@ -939,7 +941,7 @@ namespace tdc {
                     return;
                 }
                 insert_search(hmap, factorVec, min_size, input_view, hash_provider, collisions);
-                hmap = std::unordered_map<uint64_t, len_compact_t>();
+                hmap = std::unordered_map<uint32_t, len_compact_t>();
                 min_size = 32768;
             }
 
@@ -947,12 +949,15 @@ namespace tdc {
         }
 
         //return true if collision happend
-        inline bool insert_into_research_hmap(std::unordered_map <uint64_t, len_compact_t> &hmap, len_t i,
+        inline bool insert_into_research_hmap(std::unordered_map <uint32_t, len_compact_t> &hmap, len_t i,
                                               std::vector <lz77Aprox::Factor> &factorVec, hash_interface *hash_provider,
                                               io::InputView &input_view) {
-            uint64_t hash = hash_provider->make_hash(factorVec[i].pos, factorVec[i].len, input_view);
-            std::unordered_map<uint64_t, len_compact_t>::iterator iter = hmap.find(hash);
+            uint32_t hash = hash_provider->make_hash(factorVec[i].pos, factorVec[i].len, input_view);
+            std::unordered_map<uint32_t, len_compact_t>::iterator iter = hmap.find(hash);
             len_t size = factorVec[i].len;
+            if(i==1467074|i==13089907){
+                std::cout<<"here\n";
+            }
 
             if (iter == hmap.end()) {
                 hmap[hash] = i;
@@ -1018,31 +1023,40 @@ namespace tdc {
 
         }
 
-        inline void insert_search(std::unordered_map <uint64_t, len_compact_t> &hmap,
+        inline void insert_search(std::unordered_map <uint32_t, len_compact_t> &hmap,
                                   std::vector <lz77Aprox::Factor> &factorVec,
-                                  len_compact_t size, io::InputView &input_view, hash_interface *hash_provider,
+                                  len_t size, io::InputView &input_view, hash_interface *hash_provider,
                                   bool &coll) {
             rolling_hash rhash = hash_provider->make_rolling_hash(0, size, input_view);
             len_compact_t index;
-
-            std::unordered_map<uint64_t, len_compact_t>::iterator iter;
+            len_t what;
+            std::unordered_map<uint32_t, len_compact_t>::iterator iter;
 
             if (coll) {
                 for (len_compact_t i = size; i < input_view.size(); i++) {
+                    if(rhash.hashvalue==866011271){
+                        std::cout<<"here\n";
+                        what=hmap[0];
+                        bool vor = rhash.position <75714944;
+                    }
 
                     iter = hmap.find(rhash.hashvalue);
 
 
                     if (iter != hmap.end()) {
+                        //entry exists
                         index = hmap[rhash.hashvalue];
                         if (input_view.substr(factorVec[index].pos, size) ==
                             input_view.substr(rhash.position, size)) {
+                            //is the same string
                             //NO COLLISION
 
                             if (rhash.position < factorVec[index].pos) {
+                                //lies before string
                                 factorVec[index].src = rhash.position;
                             }
                             if (hmap.find(rhash.hashvalue + 1) != hmap.end()) {
+                                //check if collisions need to be shifted
                                 len_t offset = 1;
                                 len_t dex = hmap[rhash.hashvalue + offset];
                                 len_t ss = factorVec[dex].pos;
@@ -1160,10 +1174,10 @@ namespace tdc {
             //HASH
             hash_interface *hash_provider;
 
-            //hash_provider = new berenstein_hash();
+            hash_provider = new berenstein_hash();
             //hash_provider = new dna_nth_hash();
             //hash_provider = new stackoverflow_hash();
-            hash_provider = new buz_hash();
+            //hash_provider = new buz_hash();
 
 
             //make reusable containers
@@ -1172,12 +1186,12 @@ namespace tdc {
 
             std::vector <Chain> phase2_buffer;
 
-            std::unordered_map <uint64_t, len_compact_t> hmap;
+            std::unordered_map <uint32_t, len_compact_t> hmap;
 
-            std::vector <std::unordered_map<uint64_t, len_compact_t>> hmap_storage;
+            std::vector <std::unordered_map<uint32_t, len_compact_t>> hmap_storage;
 
 
-            std::unordered_map <uint64_t, len_compact_t> temp_hmap_storage;
+            std::unordered_map <uint32_t, len_compact_t> temp_hmap_storage;
 
 
             len_compact_t size = WINDOW_SIZE / 2;
@@ -1192,23 +1206,23 @@ namespace tdc {
                     StatPhase::wrap("Round: " + std::to_string(round), [&] {
 
                         StatPhase::wrap("fill hashmap", [&] {
-                            fill_chain_hashmap(hmap, temp_hmap_storage, curr_Chains, size, input_view, hash_provider,collision);
-                            //fill_chain_hashmap_no_store(hmap, curr_Chains, size, input_view, hash_provider, collision);
+                            //fill_chain_hashmap(hmap, temp_hmap_storage, curr_Chains, size, input_view, hash_provider,collision);
+                            fill_chain_hashmap_no_store(hmap, curr_Chains, size, input_view, hash_provider, collision);
                         });
 
                         StatPhase::log("collisions", collision);
                         StatPhase::log("hmap.size", hmap.size());
                         StatPhase::wrap("Search", [&] {
-                            phase1_search(hmap, curr_Chains, size, input_view, hash_provider,  temp_hmap_storage, collision);
-                            //phase1_search_no_store(hmap, curr_Chains, size, input_view, hash_provider, collision);
+                            //phase1_search(hmap, curr_Chains, size, input_view, hash_provider,  temp_hmap_storage, collision);
+                            phase1_search_no_store(hmap, curr_Chains, size, input_view, hash_provider, collision);
                         });
 
 
                         hmap_storage.push_back(std::move(temp_hmap_storage));
 
 
-                        temp_hmap_storage = std::unordered_map<uint64_t, len_compact_t>();
-                        hmap = std::unordered_map<uint64_t, len_compact_t>();
+                        temp_hmap_storage = std::unordered_map<uint32_t, len_compact_t>();
+                        hmap = std::unordered_map<uint32_t, len_compact_t>();
 
 
 
@@ -1274,12 +1288,13 @@ namespace tdc {
                         size = groupVec[active_index.front()].get_next_length() * 2;
 
                         StatPhase::log("hmap size", hmap.size());
+                        StatPhase::log("collisions", collision);
 
 
                         StatPhase::wrap("search", [&] {
                             phase2_search(size, groupVec, hmap, factorVec, input_view, hash_provider, collision);
                         });
-                        hmap = std::unordered_map<uint64_t, len_compact_t>();
+                        hmap = std::unordered_map<uint32_t, len_compact_t>();
 
 
                         StatPhase::wrap("check", [&] { check_groups(size, groupVec, active_index, factorVec); });
@@ -1300,7 +1315,7 @@ namespace tdc {
             lzss::FactorBufferRAM factors;
             // encode
 
-
+            /*
             StatPhase::wrap("transfer3", [&] {
 
                 len_t threshold_ctz = __builtin_ctz(MIN_FACTOR_LENGTH);
@@ -1316,14 +1331,14 @@ namespace tdc {
                         factors.emplace_back(f.pos, f.src, f.len);
                     } else {
                         len_t hmap_index = hmap_storage.size() - 1 - (__builtin_ctz(f.len) - threshold_ctz);
-                        uint64_t hash = hash_provider->make_hash(f.pos, f.len, input_view);
+                        uint32_t hash = hash_provider->make_hash(f.pos, f.len, input_view);
                         len_compact_t src = hmap_storage[hmap_index][hash];
                         len_t offset = 0;
 
                         //COLLISION
                         bool found = false;
                         while (!found) {
-                            std::unordered_map<uint64_t, len_compact_t>::iterator iter = hmap_storage[hmap_index].find(
+                            std::unordered_map<uint32_t, len_compact_t>::iterator iter = hmap_storage[hmap_index].find(
                                     hash + offset);
                             if (iter != hmap_storage[hmap_index].end()) {
                                 src = iter->second;
@@ -1342,7 +1357,7 @@ namespace tdc {
                 }
 
             });
-            /*
+            */
             StatPhase::wrap("transfer3", [&] {
                 research_positions( factorVec, MIN_FACTOR_LENGTH,hash_provider,input_view);
                 len_t shrinkc=0;
@@ -1354,7 +1369,7 @@ namespace tdc {
                 factorVec.pop_back();
             }
             });
-            */
+
 
 
 

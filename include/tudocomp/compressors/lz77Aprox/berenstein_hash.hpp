@@ -5,7 +5,7 @@
 namespace tdc{
 
     //bernsteinhash djb2 dan Bernstein
-    class berenstein_hash : public hash_interface{
+    class   berenstein_hash final : public hash_interface{
 
     private:
         const uint32_t PRIME_BASE=33;

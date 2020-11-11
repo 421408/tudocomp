@@ -8,8 +8,8 @@ namespace tdc{
     struct rolling_hash
     {
         len_t position,length;
-        uint64_t hashvalue;
-        uint64_t c0_exp;
+        uint32_t hashvalue;
+        uint32_t c0_exp;
     };
     
 
@@ -19,7 +19,7 @@ namespace tdc{
         
         virtual ~hash_interface(){};
 
-        virtual uint64_t make_hash(len_t start, len_t size,io::InputView &input_view) =0;
+        virtual uint32_t make_hash(len_t start, len_t size,io::InputView &input_view) =0;
 
         virtual rolling_hash make_rolling_hash(len_t start,len_t size,io::InputView &input_view)=0;
 

@@ -5,7 +5,7 @@
 
 namespace tdc {
 
-    class dna_nth_hash : public hash_interface {
+    class dna_nth_hash final : public hash_interface {
 
     //https://doi.org/10.1093/bioinformatics/btw397
     //explain:

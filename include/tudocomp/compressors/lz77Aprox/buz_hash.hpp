@@ -4,7 +4,7 @@
 #include <tudocomp/compressors/lz77Aprox/hash_interface.hpp>
 namespace tdc{
 
-    class buz_hash : public hash_interface{
+    class  buz_hash  final: public hash_interface{
 
     private:
         const uint64_t PRIME_BASE;
@@ -122,8 +122,6 @@ namespace tdc{
 
         }
 
-
-
         ~buz_hash(){};
 
 
@@ -157,25 +155,8 @@ namespace tdc{
         }
 
         inline void advance_rolling_hash(rolling_hash &rhash,io::InputView &input_view){
-
             rhash.hashvalue = rotate(rhash.hashvalue,1) ^ rotate(tab[input_view[rhash.position]],rhash.length) ^  tab[input_view[rhash.position+rhash.length]];
-
             rhash.position++;
-            /*
-             if(rhash.hashvalue!=make_hash(rhash.position,rhash.length,input_view)){
-                std::cout<<input_view.substr(rhash.position,rhash.length)<<std::endl;
-              std::cout<<"rhash: "<<rhash.hashvalue<<" ,mhash: "<<make_hash(rhash.position,rhash.length,input_view)<<std::endl;
-
-                std::cout<<"old hash: "<<make_hash(rhash.position-1,rhash.length,input_view)<<std::endl;
-                std::cout<<"pos: "<<rhash.position<<" l: "<<rhash.length<<std::endl;
-               std::cout<<"int: "<<int(input_view[rhash.position+rhash.length-1])<<" int(char): "<<int(char(input_view[rhash.position+rhash.length-1]))<<std::endl;
-                std::cout<<"ascii: "<<input_view[rhash.position-1]<<" int: "<<int(input_view[rhash.position-1])<<std::endl;
-
-              throw std::invalid_argument( "doesnt match hash" );
-            }
-            */
-
-
         }
 
 
