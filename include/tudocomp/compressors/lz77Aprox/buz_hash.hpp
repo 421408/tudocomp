@@ -128,7 +128,7 @@ namespace tdc{
         inline uint64_t rotate(uint64_t val, uint64_t exp) {
             return (val << exp | val >> (64 - exp));
         }
-
+        //returns hash of substring with given parameters
         inline uint64_t make_hash(len_t start, len_t size,io::InputView &input_view){
 
 
@@ -142,7 +142,8 @@ namespace tdc{
 
             return hash;
         }
-
+        //return a rollinghash struct defined above with position = start
+        // and length = size
         inline rolling_hash make_rolling_hash(len_t start, len_t size,io::InputView &input_view){
             rolling_hash rhash;
             rhash.length=size;
@@ -153,7 +154,7 @@ namespace tdc{
 
             return rhash;
         }
-
+        //advances the rollinghash struct by 1 and updates the hashvalue
         inline void advance_rolling_hash(rolling_hash &rhash,io::InputView &input_view){
             rhash.hashvalue = rotate(rhash.hashvalue,1) ^ rotate(tab[input_view[rhash.position]],rhash.length) ^  tab[input_view[rhash.position+rhash.length]];
             rhash.position++;

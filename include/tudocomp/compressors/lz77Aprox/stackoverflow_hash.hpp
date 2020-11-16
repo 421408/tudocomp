@@ -3,7 +3,7 @@
 #include <tudocomp/def.hpp>
 #include <tudocomp/compressors/lz77Aprox/hash_interface.hpp>
 namespace tdc{
-
+namespace lz77Aprox{
     class  stackoverflow_hash final: public hash_interface{
 
     private:
@@ -11,14 +11,14 @@ namespace tdc{
         const int64_t PRIME_MOD;
 
     public:
-
+        //constructor with good primes
         stackoverflow_hash():PRIME_BASE(257),PRIME_MOD((1ULL<<54)-33){}
-
+        //constructor with custom primes
         stackoverflow_hash(uint64_t pb,uint64_t pm):PRIME_BASE(pb),PRIME_MOD(pm){}
 
         ~stackoverflow_hash(){};
 
-
+        //returns hash of substring with given parameters
         inline uint64_t make_hash(len_t start, len_t size,io::InputView &input_view){
 
 
@@ -29,7 +29,8 @@ namespace tdc{
 
             return hash;
         }
-
+        //return a rollinghash struct defined above with position = start
+        // and length = size
         inline rolling_hash make_rolling_hash(len_t start, len_t size,io::InputView &input_view){
             rolling_hash rhash;
             rhash.length=size;
@@ -42,7 +43,7 @@ namespace tdc{
             }
             return rhash;
         }
-
+        //advances the rollinghash struct by 1 and updates the hashvalue
         inline void advance_rolling_hash(rolling_hash &rhash,io::InputView &input_view){
             int64_t oldhash = rhash.hashvalue;
             int64_t first= (input_view[rhash.position]*rhash.c0_exp)%PRIME_MOD;
@@ -53,26 +54,13 @@ namespace tdc{
                 e=e+PRIME_MOD;
             }
             rhash.hashvalue =e;
-            //rhash.hashvalue = (((rhash.hashvalue-((input_view[rhash.position]*rhash.c0_exp)%PRIME_MOD))*PRIME_BASE)%PRIME_MOD+input_view[rhash.position+rhash.length])%PRIME_MOD;
-
             rhash.position++;
-            /*
-             if(rhash.hashvalue!=make_hash(rhash.position,rhash.length,input_view)){
-                std::cout<<input_view.substr(rhash.position,rhash.length)<<std::endl;
-              std::cout<<"rhash: "<<rhash.hashvalue<<" ,mhash: "<<make_hash(rhash.position,rhash.length,input_view)<<std::endl;
-               std::cout<<"exp: "<<rhash.c0_exp*input_view[rhash.position-1]<<std::endl;
-                std::cout<<"exp*c0: "<<(rhash.c0_exp*input_view[rhash.position-1])%PRIME_MOD<<std::endl;
-                std::cout<<"pos: "<<rhash.position<<" l: "<<rhash.length<<std::endl;
-               std::cout<<"int: "<<int(input_view[rhash.position+rhash.length-1])<<" int(char): "<<int(char(input_view[rhash.position+rhash.length-1]))<<std::endl;
-                std::cout<<"ascii: "<<input_view[rhash.position-1]<<" int: "<<int(input_view[rhash.position-1])<<std::endl;
 
-              throw std::invalid_argument( "doesnt match hash" );
-            }
-             */
 
 
       }
 
 
 
-  };}
+  };}//namespace lz77Aprox
+   }//ns tdc

@@ -6,6 +6,9 @@ namespace tdc {
     namespace lz77Aprox {
 
         class Factor {
+            //this class is used to represent factors of an LZ-parse
+            // it implements the operators <,>
+            //to make sorting a vector of these possible
         public:
             len_compact_t pos, src, len;
 
@@ -27,5 +30,5 @@ namespace tdc {
             }
         }  __attribute__((__packed__));
 
-    }
+    }//namespace lz77Aprox
 }
