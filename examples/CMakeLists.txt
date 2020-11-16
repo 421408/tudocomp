@@ -12,7 +12,7 @@ add_executable(
     coder_stats_example
 
     coder_stats.cpp
-        ../include/tudocomp/compressors/lz77Aprox/berenstein_hash.hpp ../include/tudocomp/compressors/lz77Aprox/dna_nth_hash.hpp ../include/tudocomp/compressors/lz77Aprox/buz_hash.hpp)
+        ../include/tudocomp/compressors/lz77Aprox/berenstein_hash.hpp ../include/tudocomp/compressors/lz77Aprox/dna_nth_hash.hpp ../include/tudocomp/compressors/lz77Aprox/buz_hash.hpp ../include/tudocomp/compressors/LZ77AproxCompressor-nthash.hpp ../include/tudocomp/compressors/LZ77AproxCompressor-rabin-karp.hpp ../include/tudocomp/compressors/LZ77AproxCompressor-buz.hpp ../include/tudocomp/compressors/LZ77AproxCompressor-djb2.hpp ../include/tudocomp/compressors/lz77Aprox/hash_interface_32.hpp)
 
 target_link_libraries(
     coder_stats_example

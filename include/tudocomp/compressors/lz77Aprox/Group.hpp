@@ -54,7 +54,7 @@ namespace tdc {
             }
 
             //"QUEUE" that encodes the remaining factors
-            uint32_t chain;
+            uint16_t chain;
 
 
             bool increasing;
@@ -62,7 +62,7 @@ namespace tdc {
             //active group/factor
             len_t position;
             len_t src_position;
-            uint32_t length;
+            uint16_t length;
 
             //getter and setter
             inline len_compact_t get_position() {
@@ -113,7 +113,8 @@ namespace tdc {
 
                 return chain;
             }
-
+            //INPUT: src_position
+            //OUTPUT: active group/factor merged with next factor
             // function to merge the next factor into the active group/factor
             inline void absorp_next(len_t src) {
 
@@ -135,6 +136,8 @@ namespace tdc {
 
             }
 
+            //INPUT: /
+            //OUTPUT: the active group/factor, next factor is now active group/factor
             // function to output the active group/factor
             // and make the next factor the active group/factor
             inline lz77Aprox::Factor advance_Group() {

@@ -23,7 +23,7 @@ namespace tdc {
             }
 
             //encodes the found/unfound factors
-            uint32_t chain;
+            uint16_t chain;
 
             len_compact_t positon;
 

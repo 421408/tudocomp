@@ -32,16 +32,14 @@
 #include <tudocomp/compressors/lz77Aprox/Chain.hpp>
 #include <tudocomp/compressors/lz77Aprox/Factor.hpp>
 #include <tudocomp/compressors/lz77Aprox/hash_interface.hpp>
-//#include <tudocomp/compressors/lz77Aprox/stackoverflow_hash.hpp>
-//#include <tudocomp/compressors/lz77Aprox/berenstein_hash.hpp>
-//#include <tudocomp/compressors/lz77Aprox/dna_nth_hash.hpp>
-#include <tudocomp/compressors/lz77Aprox/buz_hash.hpp>
+#include <tudocomp/compressors/lz77Aprox/dna_nth_hash.hpp>
+
 
 namespace tdc {
     using namespace lz77Aprox;
 
     template<typename lzss_coder_t>
-    class LZ77AproxCompressor : public Compressor {
+    class LZ77AproxCompressor-nthash : public Compressor {
         //this class seeks to implement an approximation of an LZ-parse
         //this result is achieved by implementing the first 2 phases of the algorithm described in
         //Approximating LZ77 via Small-Space Multiple-Pattern Matching
@@ -1096,234 +1094,6 @@ namespace tdc {
         }
 
 
-        inline void research_positions(std::vector <lz77Aprox::Factor> &factorVec, len_t threshold,
-                                       hash_interface *hash_provider, io::InputView &input_view) {
-            //output hmap with index of factors to search
-            std::unordered_map <uint64_t, len_compact_t> hmap;
-
-            len_t min_size = 32768;
-            len_t old_size;
-            while (min_size >= threshold) {
-                bool collisions = false;
-                for (len_t i = 0; i < factorVec.size(); i++) {
-                    lz77Aprox::Factor f = factorVec[i];
-                    if (f.src == f.pos) {
-                        if (f.len == min_size) {
-                            collisions = collisions |
-                                         insert_into_research_hmap(hmap, i, factorVec, hash_provider, input_view);
-                        }
-                        if (f.len < min_size) {
-                            min_size = f.len;
-                            hmap.clear();
-                            collisions = collisions |
-                                         insert_into_research_hmap(hmap, i, factorVec, hash_provider, input_view);
-
-                        }
-                    }
-                }
-                if (hmap.empty()) {
-                    return;
-                }
-                insert_search(hmap, factorVec, min_size, input_view, hash_provider, collisions);
-                hmap = std::unordered_map<uint64_t, len_compact_t>();
-                min_size = 32768;
-            }
-
-
-        }
-
-        //return true if collision happend
-        inline bool insert_into_research_hmap(std::unordered_map <uint64_t, len_compact_t> &hmap, len_t i,
-                                              std::vector <lz77Aprox::Factor> &factorVec,
-                                              hash_interface *hash_provider,
-                                              io::InputView &input_view) {
-            uint64_t hash = hash_provider->make_hash(factorVec[i].pos, factorVec[i].len, input_view);
-            std::unordered_map<uint64_t, len_compact_t>::iterator iter = hmap.find(hash);
-            len_t size = factorVec[i].len;
-            if (i == 1467074 | i == 13089907) {
-                std::cout << "here\n";
-            }
-
-            if (iter == hmap.end()) {
-                hmap[hash] = i;
-                return false;
-            } else {
-                //NOT EMPTY
-                //Possible Collision
-                if (input_view.substr(factorVec[iter->second].pos, size) ==
-                    input_view.substr(factorVec[i].pos, size)) {
-                    //no collision
-                    if (factorVec[iter->second].pos < factorVec[i].pos) {
-                        //old lies before
-                        factorVec[i].src = factorVec[iter->second].pos;
-
-
-                    } else {
-                        //old lies behind
-                        factorVec[iter->second].src = factorVec[i].pos;
-                        hmap[hash] = i;
-
-
-                    }
-                    return false;
-                } else {
-                    //COLLISION
-
-                    bool inserted = false;
-                    len_t offset = 1;
-                    while (!inserted) {
-                        iter = hmap.find(hash + offset);
-                        if (iter == hmap.end()) {
-                            //this bucket is empty
-                            hmap[hash + offset] = i;
-                            inserted = true;
-
-                        } else {
-                            //next buvket is not empty
-                            if (input_view.substr(factorVec[iter->second].pos, size) ==
-                                input_view.substr(factorVec[i].pos, size)) {
-                                //strings match
-                                //no collision
-                                if (factorVec[iter->second].pos < factorVec[i].pos) {
-                                    //old lies before
-                                    factorVec[i].src = factorVec[iter->second].pos;
-
-                                } else {
-                                    //old lies behind
-                                    factorVec[iter->second].src = factorVec[i].pos;
-                                    hmap[hash + offset] = i;
-
-
-                                }
-                                inserted = true;
-
-                            }
-
-                        }
-                        offset++;
-                    }
-                    return true;
-                }
-            }
-
-        }
-
-        inline void insert_search(std::unordered_map <uint64_t, len_compact_t> &hmap,
-                                  std::vector <lz77Aprox::Factor> &factorVec,
-                                  len_t size, io::InputView &input_view, hash_interface *hash_provider,
-                                  bool &coll) {
-            rolling_hash rhash = hash_provider->make_rolling_hash(0, size, input_view);
-            len_compact_t index;
-            len_t what;
-            std::unordered_map<uint64_t, len_compact_t>::iterator iter;
-
-            if (coll) {
-                for (len_compact_t i = size; i < input_view.size(); i++) {
-                    if (rhash.hashvalue == 866011271) {
-                        std::cout << "here\n";
-                        what = hmap[0];
-                        bool vor = rhash.position < 75714944;
-                    }
-
-                    iter = hmap.find(rhash.hashvalue);
-
-
-                    if (iter != hmap.end()) {
-                        //entry exists
-                        index = hmap[rhash.hashvalue];
-                        if (input_view.substr(factorVec[index].pos, size) ==
-                            input_view.substr(rhash.position, size)) {
-                            //is the same string
-                            //NO COLLISION
-
-                            if (rhash.position < factorVec[index].pos) {
-                                //lies before string
-                                factorVec[index].src = rhash.position;
-                            }
-                            if (hmap.find(rhash.hashvalue + 1) != hmap.end()) {
-                                //check if collisions need to be shifted
-                                len_t offset = 1;
-                                len_t dex = hmap[rhash.hashvalue + offset];
-                                len_t ss = factorVec[dex].pos;
-                                if (rhash.hashvalue == hash_provider->make_hash(ss, size, input_view)) {
-                                    bool empty_found = false;
-                                    while (!empty_found) {
-                                        if (hmap.find(rhash.hashvalue + offset) != hmap.end()) {
-                                            //check if hash match
-                                            dex = hmap[rhash.hashvalue + offset];
-                                            ss = factorVec[index].pos;
-                                            if (rhash.hashvalue == hash_provider->make_hash(ss, size, input_view)) {
-                                                hmap[rhash.hashvalue + offset - 1] = dex;
-                                                hmap.erase(rhash.hashvalue + offset);
-                                            }
-                                        } else {
-                                            empty_found = true;
-                                        }
-                                        offset++;
-                                    }
-                                } else {
-                                    hmap.erase(rhash.hashvalue);
-                                }
-                            } else {
-                                hmap.erase(rhash.hashvalue);
-                            }
-
-
-                        } else {
-                            //COLLISION
-
-                            len_t offset = 1;
-                            bool mt_or_right_found = false;
-                            while (!mt_or_right_found) {
-                                iter = hmap.find(rhash.hashvalue + offset);
-                                if (iter != hmap.end()) {
-                                    if (input_view.substr(factorVec[index].pos, size) ==
-                                        input_view.substr(rhash.position, size)) {
-                                        //STRING MATCHES
-                                        if (rhash.position < factorVec[index].pos) {
-
-                                            factorVec[index].src = rhash.position;
-                                        }
-
-                                        //do this to have src for duplicates in hmapfill
-                                        hmap.erase(rhash.hashvalue + offset);
-                                        mt_or_right_found = true;
-
-                                    }
-                                } else {
-                                    //empty bucket
-                                    mt_or_right_found = true;
-                                }
-                                offset++;
-                            }
-                        }
-                    }
-
-                    hash_provider->advance_rolling_hash(rhash, input_view);
-                }
-            } else {
-                for (len_compact_t i = size; i < input_view.size(); i++) {
-
-                    iter = hmap.find(rhash.hashvalue);
-                    if (iter != hmap.end()) {
-                        index = hmap[rhash.hashvalue];
-                        if (input_view.substr(factorVec[index].pos, size) ==
-                            input_view.substr(rhash.position, size)) {
-                            //TRUE MATCH
-                            if (rhash.position < factorVec[index].pos) {
-
-                                factorVec[index].src = rhash.position;
-                            }
-                            hmap.erase(rhash.hashvalue);
-                        }
-                    }
-
-
-                    hash_provider->advance_rolling_hash(rhash, input_view);
-                }
-            }
-        }
-
     public:
         inline static Meta meta() {
             Meta m(Compressor::type_desc(), "lz77Aprox",
@@ -1367,9 +1137,9 @@ namespace tdc {
             hash_interface *hash_provider;
 
             //hash_provider = new berenstein_hash();
-            //hash_provider = new dna_nth_hash();
+            hash_provider = new dna_nth_hash();
             //hash_provider = new stackoverflow_hash();
-            hash_provider = new buz_hash();
+            //hash_provider = new buz_hash();
 
 
             //make reusable containers
@@ -1455,7 +1225,7 @@ namespace tdc {
                 StatPhase::log("cherry count", phase2_buffer.size());
                 //add all cherry in phase 2 buffer to groupvec
                 cherrys_to_groups(groupVec, factorVec, phase2_buffer, MIN_FACTOR_LENGTH);
-
+            });
 
             //log the number of groups we generatet from the cherry-chains
             StatPhase::log("chain group count", groupVec.size());
@@ -1463,7 +1233,7 @@ namespace tdc {
             StatPhase::log("chain factor count", factorVec.size());
 
             //make groups from normal chains
-
+            StatPhase::wrap("transfer2", [&] {
                 chains_to_groups(groupVec, factorVec, curr_Chains, MIN_FACTOR_LENGTH);
                 StatPhase::log(" group count", groupVec.size());
                 StatPhase::log(" factor count", factorVec.size());
@@ -1534,7 +1304,7 @@ namespace tdc {
             // encode
 
 
-            StatPhase::wrap("transfer Phase 2", [&] {
+            StatPhase::wrap("transfer3", [&] {
 
                 len_t threshold_ctz = __builtin_ctz(MIN_FACTOR_LENGTH);
                 lz77Aprox::Factor f;

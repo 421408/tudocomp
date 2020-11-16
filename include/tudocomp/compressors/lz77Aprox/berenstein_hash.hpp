@@ -5,7 +5,7 @@
 namespace tdc{
 namespace lz77Aprox{
     //bernsteinhash djb2 dan Bernstein
-    class   berenstein_hash final : public hash_interface{
+    class   berenstein_hash final : public hash_interface_32{
 
     private:
         const uint32_t PRIME_BASE=33;
@@ -51,6 +51,7 @@ namespace lz77Aprox{
             uint32_t moded = (hash & PRIME_MOD)+(hash>>31);
             return (moded>=PRIME_MOD) ? hash - PRIME_MOD : moded;
         }
+
         //advances the rollinghash struct by 1 and updates the hashvalue
         void advance_rolling_hash(rolling_hash &rhash,io::InputView &input_view){
 
